@@ -1,3 +1,4 @@
+import async_http_request
 
 type Sound* = ref object
     source: ref RootObj
@@ -6,8 +7,6 @@ type Sound* = ref object
 var contextInited = false
 
 proc createContext() =
-    if contextInited: return
-    contextInited = true
     {.emit: """
     window.AudioContext = (
         window.AudioContext ||
@@ -33,9 +32,12 @@ proc createContext() =
     }
     """.}
 
-proc newSoundWithArrayBuffer*(ab: ref RootObj): Sound =
-    createContext()
-    result.new()
+template createContextIfNeeded() =
+    if not contextInited:
+        createContext()
+        contextInited = true
+
+proc initWithArrayBuffer(s: Sound, ab: ref RootObj) =
     var source : ref RootObj
     var gain : ref RootObj
     {.emit: """
@@ -51,8 +53,29 @@ proc newSoundWithArrayBuffer*(ab: ref RootObj): Sound =
 
       function(e){"Error with decoding audio data" + e.err});
     """.}
-    result.source = source
-    result.gain = gain
+    s.source = source
+    s.gain = gain
+
+proc newSoundWithArrayBuffer*(ab: ref RootObj): Sound =
+    createContextIfNeeded()
+    result.new()
+    result.initWithArrayBuffer(ab)
+
+proc newSoundWithURL*(url: string): Sound =
+    createContextIfNeeded()
+    result.new()
+    let req = newXMLHTTPRequest()
+    req.open("GET", url)
+    req.responseType = "arraybuffer"
+
+    let snd = result
+    let reqListener = proc(ev: ref RootObj) =
+        var data : ref RootObj
+        {.emit: "`data` = `ev`.target.response;".}
+        snd.initWithArrayBuffer(data)
+
+    req.addEventListener("load", reqListener)
+    req.send()
 
 proc play*(s: Sound) =
     let source = s.source
