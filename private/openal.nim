@@ -6,7 +6,11 @@ type
     ALenum* = cint
     ALfloat* = cfloat
 
-{.pragma: alimport, importc, header: "<OpenAL/OpenAL.h>".}
+when defined(linux):
+  {.passL: "-lopenal"}
+  {.pragma: alimport, importc, header: "<AL/al.h>"}
+else:
+  {.pragma: alimport, importc, header: "<OpenAL/OpenAL.h>".}
 
 when defined(macosx) or defined(ios):
     {.passL: "-framework OpenAL".}
@@ -48,7 +52,10 @@ type
     ALCcontext* = pointer
     ALCboolean* = int8
 
-{.pragma: alcimport, importc, header: "<OpenAL/OpenAL.h>".}
+when defined(linux):
+  {.pragma: alcimport, importc, header: "<AL/al.h>"}
+else:
+  {.pragma: alcimport, importc, header: "<OpenAL/OpenAL.h>".}
 
 proc alcOpenDevice*(devicename: cstring): ALCdevice {.alcimport.}
 proc alcCreateContext*(device: ALCdevice, attrlist: ptr ALCint): ALCcontext {.alcimport.}

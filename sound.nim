@@ -4,6 +4,8 @@ elif defined(android):
     include private.sound_sl
 elif defined(js):
     include private.sound_js
+elif defined(linux):
+    include private.sound_al
 
 when isMainModule:
     import os
