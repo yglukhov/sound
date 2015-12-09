@@ -1,4 +1,5 @@
-# sound
+# sound [![nimble](https://raw.githubusercontent.com/yglukhov/nimble-tag/master/nimble_js.png)](https://github.com/yglukhov/nimble-tag)
+
 Cross-platform sound mixer library
 
 The library is using different "backends" depending on target platform:
