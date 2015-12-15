@@ -1,7 +1,7 @@
 [Package]
 name          = "sound"
 version       = "0.1.0"
-author        = "Anonymous"
+author        = "Yuriy Glukhov"
 description   = "Cross-platform sound mixer"
 license       = "MIT"
 
