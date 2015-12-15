@@ -9,6 +9,8 @@ The library is using different "backends" depending on target platform:
 
 Usage:
 ```nim
+import sound.sound
+
 when defined(android):
     var activity: jobject # You should get the reference to activity from somewhere.
     activity = androidGetActivity() # E.g. If you're using sdl.
