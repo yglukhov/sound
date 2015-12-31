@@ -5,8 +5,8 @@ description   = "Cross-platform sound mixer"
 license       = "MIT"
 
 # Deps
-Requires: "nim >= 0.10.0"
-Requires: "vorbis"
-Requires: "ogg"
-Requires: "jnim"
-Requires: "async_http_request"
+requires "nim >= 0.10.0"
+requires "vorbis"
+requires "ogg"
+requires "jnim"
+requires "async_http_request"
