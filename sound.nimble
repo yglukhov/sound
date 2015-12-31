@@ -1,5 +1,4 @@
 # Package
-name          = "sound"
 version       = "0.1.0"
 author        = "Yuriy Glukhov"
 description   = "Cross-platform sound mixer"
