@@ -1,5 +1,5 @@
 import openal
-import vorbis.vorbisfile
+import stb_vorbis
 
 type Sound* = ref object
     buffer: ALuint
@@ -36,12 +36,9 @@ proc finalizeSound(s: Sound) =
 proc newSoundWithFile*(path: string): Sound =
     createContext()
 
-    var f: TOggVorbis_File
-    if fopen(path, addr f) != 0:
-        return
-    let i = info(addr f, -1)
-    if i.isNil:
-        return
+    let v = stb_vorbis_open_filename(path, nil, nil)
+    if v.isNil: return
+    let i = stb_vorbis_get_info(v)
 
     var format : ALenum
     if i.channels == 1:
@@ -49,13 +46,13 @@ proc newSoundWithFile*(path: string): Sound =
     else:
         format = AL_FORMAT_STEREO16
 
-    let freq = ALsizei(i.rate)
+    let freq = ALsizei(i.sample_rate)
 
-    var buffer = newSeq[int8]() # The sound buffer data from file
+    var buffer = newSeq[uint16]() # The sound buffer data from file
 
-    var endian: cint = 0 # 0 for Little-Endian, 1 for Big-Endian
+    #var endian: cint = 0 # 0 for Little-Endian, 1 for Big-Endian
 
-    var bitStream: cint
+    #var bitStream: cint
     var bytes : clong
 
     const LE_OGG_BUFFER_SIZE = 32768
@@ -64,14 +61,16 @@ proc newSoundWithFile*(path: string): Sound =
     while true:
         # Read up to a buffer's worth of decoded sound data
         buffer.setLen(curOffset + LE_OGG_BUFFER_SIZE)
-        bytes = read(addr f, cast[cstring](addr buffer[curOffset]), LE_OGG_BUFFER_SIZE, endian, 2, 1, addr bitStream)
+        bytes = stb_vorbis_get_samples_short_interleaved(v, i.channels, addr buffer[curOffset], LE_OGG_BUFFER_SIZE) * i.channels
+
+#        bytes = read(addr f, cast[cstring](addr buffer[curOffset]), LE_OGG_BUFFER_SIZE, endian, 2, 1, addr bitStream)
         if bytes > 0:
             curOffset += bytes
         else:
             buffer.setLen(curOffset)
             break
 
-    discard clear(addr f)
+    stb_vorbis_close(v)
 
     result.new(finalizeSound)
 

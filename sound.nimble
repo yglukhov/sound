@@ -6,7 +6,5 @@ license       = "MIT"
 
 # Deps
 requires "nim >= 0.10.0"
-requires "vorbis"
-requires "ogg"
 requires "jnim"
 requires "async_http_request"
