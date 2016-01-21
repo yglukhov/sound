@@ -9,6 +9,8 @@ type
 when defined(linux):
   {.passL: "-lopenal"}
   {.pragma: alimport, importc, header: "<AL/al.h>"}
+elif defined(windows):
+  {.pragma: alimport, cdecl, dynlib: "OpenAL32.dll", importc.}
 else:
   {.pragma: alimport, importc, header: "<OpenAL/OpenAL.h>".}
 
@@ -54,6 +56,8 @@ type
 
 when defined(linux):
   {.pragma: alcimport, importc, header: "<AL/al.h>"}
+elif defined(windows):
+  {.pragma: alcimport, cdecl, dynlib: "OpenAL32.dll", importc.}
 else:
   {.pragma: alcimport, importc, header: "<OpenAL/OpenAL.h>".}
 
