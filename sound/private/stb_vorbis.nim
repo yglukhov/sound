@@ -146,13 +146,13 @@ typedef struct
 } stb_vorbis_info;
 
 // get general information about the file
-extern stb_vorbis_info stb_vorbis_get_info(stb_vorbis *f);
+extern N_NIMCALL(stb_vorbis_info, stb_vorbis_get_info)(stb_vorbis *f);
 
 // get the last error detected (clears it, too)
 extern int stb_vorbis_get_error(stb_vorbis *f);
 
 // close an ogg vorbis file and free all memory in use
-extern void stb_vorbis_close(stb_vorbis *f);
+extern N_NIMCALL(void, stb_vorbis_close)(stb_vorbis *f);
 
 // this function returns the offset (in samples) from the beginning of the
 // file that will be returned by the next decode, if it is known, or -1
@@ -261,7 +261,7 @@ extern stb_vorbis * stb_vorbis_open_memory(const unsigned char *data, int len,
 // this must be the entire stream!). on failure, returns NULL and sets *error
 
 #ifndef STB_VORBIS_NO_STDIO
-extern stb_vorbis * stb_vorbis_open_filename(const char *filename,
+extern N_NIMCALL(stb_vorbis *, stb_vorbis_open_filename)(const char *filename,
                                   int *error, const stb_vorbis_alloc *alloc_buffer);
 // create an ogg vorbis decoder from a filename via fopen(). on failure,
 // returns NULL and sets *error (possibly to VORBIS_file_open_failure).
@@ -297,7 +297,7 @@ extern int stb_vorbis_seek(stb_vorbis *f, unsigned int sample_number);
 extern void stb_vorbis_seek_start(stb_vorbis *f);
 // this function is equivalent to stb_vorbis_seek(f,0)
 
-extern unsigned int stb_vorbis_stream_length_in_samples(stb_vorbis *f);
+extern N_NIMCALL(unsigned int, stb_vorbis_stream_length_in_samples)(stb_vorbis *f);
 extern float        stb_vorbis_stream_length_in_seconds(stb_vorbis *f);
 // these functions return the total length of the vorbis stream
 
@@ -348,7 +348,7 @@ extern int stb_vorbis_get_samples_float(stb_vorbis *f, int channels, float **buf
 // at the end of the file. If there are no more samples in the file, returns 0.
 
 #ifndef STB_VORBIS_NO_INTEGER_CONVERSION
-extern int stb_vorbis_get_samples_short_interleaved(stb_vorbis *f, int channels, short *buffer, int num_shorts);
+extern N_NIMCALL(int, stb_vorbis_get_samples_short_interleaved)(stb_vorbis *f, int channels, short *buffer, int num_shorts);
 extern int stb_vorbis_get_samples_short(stb_vorbis *f, int channels, short **buffer, int num_samples);
 #endif
 // gets num_samples samples, not necessarily on a frame boundary--this requires
@@ -4250,7 +4250,7 @@ static void vorbis_deinit(stb_vorbis *p)
    #endif
 }
 
-void stb_vorbis_close(stb_vorbis *p)
+N_NIMCALL(void, stb_vorbis_close)(stb_vorbis *p)
 {
    if (p == NULL) return;
    vorbis_deinit(p);
@@ -4284,7 +4284,7 @@ int stb_vorbis_get_sample_offset(stb_vorbis *f)
       return -1;
 }
 
-stb_vorbis_info stb_vorbis_get_info(stb_vorbis *f)
+N_NIMCALL(stb_vorbis_info, stb_vorbis_get_info)(stb_vorbis *f)
 {
    stb_vorbis_info d;
    d.channels = f->channels;
@@ -4906,7 +4906,7 @@ void stb_vorbis_seek_start(stb_vorbis *f)
    vorbis_pump_first_frame(f);
 }
 
-unsigned int stb_vorbis_stream_length_in_samples(stb_vorbis *f)
+N_NIMCALL(unsigned int, stb_vorbis_stream_length_in_samples)(stb_vorbis *f)
 {
    unsigned int restore_offset, previous_safe;
    unsigned int end, last_page_loc;
@@ -5043,7 +5043,7 @@ stb_vorbis * stb_vorbis_open_file(FILE *file, int close_on_free, int *error, con
    return stb_vorbis_open_file_section(file, close_on_free, error, alloc, len);
 }
 
-stb_vorbis * stb_vorbis_open_filename(const char *filename, int *error, const stb_vorbis_alloc *alloc)
+N_NIMCALL(stb_vorbis *, stb_vorbis_open_filename)(const char *filename, int *error, const stb_vorbis_alloc *alloc)
 {
    FILE *f = fopen(filename, "rb");
    if (f)
@@ -5257,7 +5257,7 @@ int stb_vorbis_get_frame_short_interleaved(stb_vorbis *f, int num_c, short *buff
    return len;
 }
 
-int stb_vorbis_get_samples_short_interleaved(stb_vorbis *f, int channels, short *buffer, int num_shorts)
+N_NIMCALL(int, stb_vorbis_get_samples_short_interleaved)(stb_vorbis *f, int channels, short *buffer, int num_shorts)
 {
    float **outputs;
    int len = num_shorts / channels;
