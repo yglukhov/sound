@@ -26,10 +26,12 @@ const AL_BUFFER* : ALenum =                              0x1009
 
 const AL_POSITION* : ALenum =                            0x1004
 
-const AL_DIRECTION* : ALenum =                               0x1005
+const AL_DIRECTION* : ALenum =                           0x1005
 
-const AL_VELOCITY* : ALenum =                               0x1006
-const AL_ORIENTATION* : ALenum =                            0x100F
+const AL_VELOCITY* : ALenum =                            0x1006
+const AL_ORIENTATION* : ALenum =                         0x100F
+
+const AL_LOOPING* : ALenum =                             0x1007
 
 proc alGenBuffers*(n: ALsizei , buffers: ptr ALuint) {.alimport.}
 proc alGenSources*(n: ALsizei, sources: ptr ALuint) {.alimport.}

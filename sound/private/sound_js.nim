@@ -77,6 +77,10 @@ proc newSoundWithURL*(url: string): Sound =
     req.addEventListener("load", reqListener)
     req.send()
 
+proc setLooping*(s: Sound, flag: bool) =
+    let source = s.source
+    {.emit: "`source`.loop = `flag`;".}
+
 proc play*(s: Sound) =
     let source = s.source
     {.emit: "`source`.start(0);".}

@@ -76,9 +76,12 @@ proc newSoundWithFile*(path: string): Sound =
 
     alGenBuffers(1, addr result.buffer)
     # Upload sound data to buffer
-    alBufferData(result.buffer, format, addr buffer[0], ALsizei(buffer.len), freq)
+    alBufferData(result.buffer, format, addr buffer[0], ALsizei(buffer.len * sizeof(buffer[0])), freq)
     alGenSources(1, addr result.src)
     alSourcei(result.src, AL_BUFFER, cast[ALint](result.buffer))
+
+proc setLooping*(s: Sound, flag: bool) =
+    alSourcei(s.src, AL_LOOPING, ALint(flag))
 
 proc play*(s: Sound) =
     # Attach sound buffer to source

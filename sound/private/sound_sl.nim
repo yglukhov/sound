@@ -121,6 +121,24 @@ proc newSoundWithFile*(path: string): Sound =
     """.}
     result.player = pl
 
+proc setLooping*(s: Sound, flag: bool) =
+    let pl = s.player
+    {.emit: """
+    SLPlayItf player;
+    SLresult res = (*`pl`)->GetInterface(`pl`, SL_IID_PLAY, &player);
+    if (res == SL_RESULT_SUCCESS) {
+        SLmillisecond duration;
+        res = player->GetDuration(player, &duration);
+        if (res == SL_RESULT_SUCCESS) {
+            SLSeekItf seek;
+            res = (*`pl`)->GetInterface(`pl`, SL_IID_SEEK, &seek);
+            if (res == SL_RESULT_SUCCESS) {
+                (*seek)->SetLoop(seek, `flag`, 0, duration);
+            }
+        }
+    }
+    """.}
+
 proc play*(s: Sound) =
     let pl = s.player
     {.emit: """
