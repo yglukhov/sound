@@ -3,6 +3,7 @@ import async_http_request
 type Sound* = ref object
     source: ref RootObj
     gain: ref RootObj
+    freshSource: bool
 
 var contextInited = false
 
@@ -55,6 +56,7 @@ proc initWithArrayBuffer(s: Sound, ab: ref RootObj) =
     """.}
     s.source = source
     s.gain = gain
+    s.freshSource = true
 
 proc newSoundWithArrayBuffer*(ab: ref RootObj): Sound =
     createContextIfNeeded()
@@ -78,9 +80,29 @@ proc newSoundWithURL*(url: string): Sound =
     req.send()
 
 proc setLooping*(s: Sound, flag: bool) =
-    let source = s.source
+    let source {.hint[XDeclaredButNotUsed]: off.} = s.source
     {.emit: "`source`.loop = `flag`;".}
 
+proc recreateSource(s: Sound) =
+    var source {.hint[XDeclaredButNotUsed]: off.} = s.source
+    let gain {.hint[XDeclaredButNotUsed]: off.} = s.gain
+    {.emit: """
+    var newSource = window.__nimsound_context.createBufferSource();
+    newSource.connect(`gain`);
+    newSource.buffer = `source`.buffer;
+    newSource.loop = `source`.loop;
+    `source` = newSource;
+    """.}
+    s.source = source
+    s.freshSource = true
+
 proc play*(s: Sound) =
-    let source = s.source
+    if not s.freshSource: s.recreateSource()
+    let source {.hint[XDeclaredButNotUsed]: off.} = s.source
     {.emit: "`source`.start(0);".}
+    s.freshSource = false
+
+proc stop*(s: Sound) =
+    let source {.hint[XDeclaredButNotUsed]: off.} = s.source
+    {.emit: "`source`.stop(0);".}
+    s.recreateSource()

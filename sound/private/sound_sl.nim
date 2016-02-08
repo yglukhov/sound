@@ -139,7 +139,11 @@ proc setLooping*(s: Sound, flag: bool) =
     }
     """.}
 
-proc play*(s: Sound) =
+const SL_PLAYSTATE_STOPPED = 0x00000001'u32
+const SL_PLAYSTATE_PAUSED = 0x00000002'u32
+const SL_PLAYSTATE_PLAYING = 0x00000003'u32
+
+proc setPlayState(s: Sound, state: uint32) =
     let pl = s.player
     {.emit: """
     SLPlayItf player;
@@ -147,5 +151,11 @@ proc play*(s: Sound) =
     SLSeekItf seek;
     res = (*`pl`)->GetInterface(`pl`, SL_IID_SEEK, &seek);
     (*seek)->SetLoop(seek, SL_BOOLEAN_FALSE, 0, SL_TIME_UNKNOWN);
-    (*player)->SetPlayState(player, SL_PLAYSTATE_PLAYING);
+    (*player)->SetPlayState(player, `state`);
     """.}
+
+proc play*(s: Sound) {.inline.} =
+    s.setPlayState(SL_PLAYSTATE_PLAYING)
+
+proc stop*(s: Sound) {.inline.} =
+    s.setPlayState(SL_PLAYSTATE_STOPPED)

@@ -39,6 +39,7 @@ proc alGenSources*(n: ALsizei, sources: ptr ALuint) {.alimport.}
 proc alSourcei*(sid: ALuint, param: ALenum, value: ALint) {.alimport.}
 
 proc alSourcePlay*(sid: ALuint) {.alimport.}
+proc alSourceStop*(sid: ALuint) {.alimport.}
 
 
 proc alBufferData*(bid: ALuint, format: ALenum, data: pointer, size: ALsizei, freq: ALsizei) {.alimport.}

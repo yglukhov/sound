@@ -86,3 +86,7 @@ proc setLooping*(s: Sound, flag: bool) =
 proc play*(s: Sound) =
     # Attach sound buffer to source
     alSourcePlay(s.src)
+
+proc stop*(s: Sound) =
+    # Attach sound buffer to source
+    alSourceStop(s.src)
