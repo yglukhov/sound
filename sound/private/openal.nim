@@ -33,6 +33,12 @@ const AL_ORIENTATION* : ALenum =                         0x100F
 
 const AL_LOOPING* : ALenum =                             0x1007
 
+const AL_FREQUENCY* : ALenum =                           0x2001
+const AL_BITS* : ALenum =                                0x2002
+const AL_CHANNELS* : ALenum =                            0x2003
+const AL_SIZE* : ALenum =                                0x2004
+
+
 proc alGenBuffers*(n: ALsizei , buffers: ptr ALuint) {.alimport.}
 proc alGenSources*(n: ALsizei, sources: ptr ALuint) {.alimport.}
 
@@ -41,6 +47,7 @@ proc alSourcei*(sid: ALuint, param: ALenum, value: ALint) {.alimport.}
 proc alSourcePlay*(sid: ALuint) {.alimport.}
 proc alSourceStop*(sid: ALuint) {.alimport.}
 
+proc alGetBufferi*(bid: ALuint, param: ALenum, value: ptr ALint) {.alimport.}
 
 proc alBufferData*(bid: ALuint, format: ALenum, data: pointer, size: ALsizei, freq: ALsizei) {.alimport.}
 proc alListenerfv*(param: ALenum, values: ptr ALfloat) {.alimport.}

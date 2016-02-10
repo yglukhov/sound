@@ -31,9 +31,7 @@ var gOutputMix : SLObjectItf
 proc initSoundEngineWithActivity*(a: jobject) =
     var am = Activity(a).getApplication().getAssets()
     let env = jnim.currentEnv
-    {.emit: """
-    `gAssetManager` = AAssetManager_fromJava(`env`, `am`);
-    """.}
+    {.emit: "`gAssetManager` = AAssetManager_fromJava(`env`, `am`);".}
 
 proc initEngine() =
     if engineInited: return
@@ -138,6 +136,18 @@ proc setLooping*(s: Sound, flag: bool) =
         }
     }
     """.}
+
+proc duration*(s: Sound): float =
+    var msDuration : uint32
+    let pl = s.player
+    {.emit: """
+    SLPlayItf player;
+    int res = (*`pl`)->GetInterface(`pl`, SL_IID_PLAY, &player);
+    if (res == SL_RESULT_SUCCESS) {
+        res = (*`player`)->GetDuration(`player`, &`msDuration`);
+    }
+    """.}
+    result = float(msDuration) * 0.001
 
 const SL_PLAYSTATE_STOPPED = 0x00000001'u32
 const SL_PLAYSTATE_PAUSED = 0x00000002'u32

@@ -38,7 +38,9 @@ template createContextIfNeeded() =
         createContext()
         contextInited = true
 
-proc initWithArrayBuffer(s: Sound, ab: ref RootObj) =
+proc initWithArrayBuffer(s: Sound, ab: ref RootObj, handler: proc() = nil) =
+    createContextIfNeeded()
+
     var source : ref RootObj
     var gain : ref RootObj
     {.emit: """
@@ -50,21 +52,28 @@ proc initWithArrayBuffer(s: Sound, ab: ref RootObj) =
 
     window.__nimsound_context.decodeAudioData(`ab`, function(buffer) {
         `source`.buffer = buffer;
+        if (`handler` != null) `handler`();
       },
 
-      function(e){"Error with decoding audio data" + e.err});
+      function(e) {
+        if (`handler` != null) `handler`();
+        console.log("Error with decoding audio data" + e.err);
+        });
     """.}
     s.source = source
     s.gain = gain
     s.freshSource = true
 
 proc newSoundWithArrayBuffer*(ab: ref RootObj): Sound =
-    createContextIfNeeded()
     result.new()
     result.initWithArrayBuffer(ab)
 
+proc newSoundWithArrayBufferAsync*(ab: ref RootObj, handler: proc(s: Sound)) =
+    let s = Sound.new()
+    s.initWithArrayBuffer(ab, proc() =
+        handler(s))
+
 proc newSoundWithURL*(url: string): Sound =
-    createContextIfNeeded()
     result.new()
     let req = newXMLHTTPRequest()
     req.open("GET", url)
@@ -95,6 +104,10 @@ proc recreateSource(s: Sound) =
     """.}
     s.source = source
     s.freshSource = true
+
+proc duration*(s: Sound): float =
+    let source = s.source
+    {.emit: "`result` = `source`.buffer.duration;".}
 
 proc play*(s: Sound) =
     if not s.freshSource: s.recreateSource()
