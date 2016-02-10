@@ -99,3 +99,6 @@ proc play*(s: Sound) =
 proc stop*(s: Sound) =
     # Attach sound buffer to source
     alSourceStop(s.src)
+
+proc `gain=`*(s: Sound, v: float) =
+    alSourcef(s.src, AL_GAIN, v)

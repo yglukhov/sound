@@ -119,3 +119,7 @@ proc stop*(s: Sound) =
     let source {.hint[XDeclaredButNotUsed]: off.} = s.source
     {.emit: "`source`.stop(0);".}
     s.recreateSource()
+
+proc `gain=`*(s: Sound, v: float) =
+    let g = s.gain
+    {.emit: """`g`.gain.value = `v`;""".}

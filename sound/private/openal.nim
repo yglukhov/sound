@@ -38,11 +38,14 @@ const AL_BITS* : ALenum =                                0x2002
 const AL_CHANNELS* : ALenum =                            0x2003
 const AL_SIZE* : ALenum =                                0x2004
 
+const AL_GAIN* : ALenum =                                0x100A
+
 
 proc alGenBuffers*(n: ALsizei , buffers: ptr ALuint) {.alimport.}
 proc alGenSources*(n: ALsizei, sources: ptr ALuint) {.alimport.}
 
 proc alSourcei*(sid: ALuint, param: ALenum, value: ALint) {.alimport.}
+proc alSourcef*(sid: ALuint, param: ALenum, value: ALfloat) {.alimport.}
 
 proc alSourcePlay*(sid: ALuint) {.alimport.}
 proc alSourceStop*(sid: ALuint) {.alimport.}

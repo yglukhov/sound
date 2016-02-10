@@ -1,4 +1,5 @@
 import jnim
+import math
 
 {.emit: """/*INCLUDESECTION*/
 #include <SLES/OpenSLES_Android.h>
@@ -169,3 +170,17 @@ proc play*(s: Sound) {.inline.} =
 
 proc stop*(s: Sound) {.inline.} =
     s.setPlayState(SL_PLAYSTATE_STOPPED)
+
+proc gainToAttenuation(gain: float ): float =
+    return if gain < 0.01: -96.0 else: 20 * log10(gain)
+
+proc `gain=`*(s: Sound, v: float) =
+    let a = gainToAttenuation(v)
+    let pl = s.player
+    {.emit: """
+    SLVolumeItf volume;
+    int res = (*`pl`)->GetInterface(`pl`, SL_IID_VOLUME, &volume);
+    if (res == SL_RESULT_SUCCESS) {
+        (*`volume`)->SetVolumeLevel(`volume`, `a` * 100.0);
+    }
+    """.}
