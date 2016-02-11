@@ -127,7 +127,7 @@ proc setLooping*(s: Sound, flag: bool) =
     SLresult res = (*`pl`)->GetInterface(`pl`, SL_IID_PLAY, &player);
     if (res == SL_RESULT_SUCCESS) {
         SLmillisecond duration;
-        res = player->GetDuration(player, &duration);
+        res = (*player)->GetDuration(player, &duration);
         if (res == SL_RESULT_SUCCESS) {
             SLSeekItf seek;
             res = (*`pl`)->GetInterface(`pl`, SL_IID_SEEK, &seek);
@@ -145,7 +145,7 @@ proc duration*(s: Sound): float =
     SLPlayItf player;
     int res = (*`pl`)->GetInterface(`pl`, SL_IID_PLAY, &player);
     if (res == SL_RESULT_SUCCESS) {
-        res = (*`player`)->GetDuration(`player`, &`msDuration`);
+        res = (*player)->GetDuration(player, &`msDuration`);
     }
     """.}
     result = float(msDuration) * 0.001
@@ -186,7 +186,7 @@ proc `gain=`*(s: Sound, v: float) =
     SLVolumeItf volume;
     int res = (*`pl`)->GetInterface(`pl`, SL_IID_VOLUME, &volume);
     if (res == SL_RESULT_SUCCESS) {
-        (*`volume`)->SetVolumeLevel(`volume`, `a` * 100.0);
+        (*volume)->SetVolumeLevel(volume, `a` * 100.0);
     }
     """.}
 
@@ -197,7 +197,7 @@ proc gain*(s: Sound): float =
     SLVolumeItf volume;
     int res = (*`pl`)->GetInterface(`pl`, SL_IID_VOLUME, &volume);
     if (res == SL_RESULT_SUCCESS) {
-        (*`volume`)->GetVolumeLevel(`volume`, &`mb`);
+        (*volume)->GetVolumeLevel(volume, &`mb`);
     }
     """.}
     result = attenuationToGain(mb.float / 100)
