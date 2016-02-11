@@ -47,6 +47,9 @@ proc alGenSources*(n: ALsizei, sources: ptr ALuint) {.alimport.}
 proc alSourcei*(sid: ALuint, param: ALenum, value: ALint) {.alimport.}
 proc alSourcef*(sid: ALuint, param: ALenum, value: ALfloat) {.alimport.}
 
+proc alGetSourcef*(sid: ALuint, param: ALenum, value: ptr ALfloat) {.alimport.}
+
+
 proc alSourcePlay*(sid: ALuint) {.alimport.}
 proc alSourceStop*(sid: ALuint) {.alimport.}
 

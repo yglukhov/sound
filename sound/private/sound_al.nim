@@ -102,3 +102,8 @@ proc stop*(s: Sound) =
 
 proc `gain=`*(s: Sound, v: float) =
     alSourcef(s.src, AL_GAIN, v)
+
+proc gain*(s: Sound): float =
+    var r : ALfloat
+    alGetSourcef(s.src, AL_GAIN, addr r)
+    result = r

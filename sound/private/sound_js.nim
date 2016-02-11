@@ -122,4 +122,8 @@ proc stop*(s: Sound) =
 
 proc `gain=`*(s: Sound, v: float) =
     let g = s.gain
-    {.emit: """`g`.gain.value = `v`;""".}
+    {.emit: "`g`.gain.value = `v`;".}
+
+proc gain*(s: Sound): float =
+    let g = s.gain
+    {.emit: "`result` = `g`.gain.value;".}

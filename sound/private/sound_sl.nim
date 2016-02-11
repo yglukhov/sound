@@ -113,9 +113,9 @@ proc newSoundWithFile*(path: string): Sound =
     };
 
     SLDataSink audioSnk = {&dataLocatorOut, NULL};
-    const SLInterfaceID pIDs[2] = {SL_IID_PLAY, SL_IID_SEEK};
-    const SLboolean pIDsRequired[2] = {SL_BOOLEAN_TRUE, SL_BOOLEAN_TRUE};
-    SLresult res = (*`gEngine`)->CreateAudioPlayer(`gEngine`, &`pl`, &audioSrc, &audioSnk, 2, pIDs, pIDsRequired);
+    const SLInterfaceID pIDs[2] = {SL_IID_PLAY, SL_IID_SEEK, SL_IID_VOLUME};
+    const SLboolean pIDsRequired[2] = {SL_BOOLEAN_TRUE, SL_BOOLEAN_TRUE, SL_BOOLEAN_TRUE};
+    SLresult res = (*`gEngine`)->CreateAudioPlayer(`gEngine`, &`pl`, &audioSrc, &audioSnk, 3, pIDs, pIDsRequired);
     res = (*`pl`)->Realize(`pl`, SL_BOOLEAN_FALSE);
     """.}
     result.player = pl
@@ -171,8 +171,13 @@ proc play*(s: Sound) {.inline.} =
 proc stop*(s: Sound) {.inline.} =
     s.setPlayState(SL_PLAYSTATE_STOPPED)
 
-proc gainToAttenuation(gain: float ): float =
+proc gainToAttenuation(gain: float): float {.inline.} =
     return if gain < 0.01: -96.0 else: 20 * log10(gain)
+
+proc attenuationToGain(a: float): float {.inline.} =
+    if a <= -96.0: return 0
+    result = a / 20
+    result = pow(10, result)
 
 proc `gain=`*(s: Sound, v: float) =
     let a = gainToAttenuation(v)
@@ -184,3 +189,15 @@ proc `gain=`*(s: Sound, v: float) =
         (*`volume`)->SetVolumeLevel(`volume`, `a` * 100.0);
     }
     """.}
+
+proc gain*(s: Sound): float =
+    let pl = s.player
+    var mb : int16
+    {.emit: """
+    SLVolumeItf volume;
+    int res = (*`pl`)->GetInterface(`pl`, SL_IID_VOLUME, &volume);
+    if (res == SL_RESULT_SUCCESS) {
+        (*`volume`)->GetVolumeLevel(`volume`, &`mb`);
+    }
+    """.}
+    result = attenuationToGain(mb.float / 100)
