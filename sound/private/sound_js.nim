@@ -95,6 +95,7 @@ proc setLooping*(s: Sound, flag: bool) =
 proc recreateSource(s: Sound) =
     var source {.hint[XDeclaredButNotUsed]: off.} = s.source
     let gain {.hint[XDeclaredButNotUsed]: off.} = s.gain
+
     {.emit: """
     var newSource = window.__nimsound_context.createBufferSource();
     newSource.connect(`gain`);
@@ -112,13 +113,14 @@ proc duration*(s: Sound): float =
 proc play*(s: Sound) =
     if not s.freshSource: s.recreateSource()
     let source {.hint[XDeclaredButNotUsed]: off.} = s.source
-    {.emit: "`source`.start(0);".}
+    {.emit: "`source`.start();".}
     s.freshSource = false
 
 proc stop*(s: Sound) =
-    let source {.hint[XDeclaredButNotUsed]: off.} = s.source
-    {.emit: "`source`.stop(0);".}
-    s.recreateSource()
+    if not s.freshSource:
+        let source {.hint[XDeclaredButNotUsed]: off.} = s.source
+        {.emit: "`source`.stop();".}
+        s.recreateSource()
 
 proc `gain=`*(s: Sound, v: float) =
     let g = s.gain
