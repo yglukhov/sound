@@ -1,3 +1,4 @@
+import math
 import jnim
 
 {.emit: """/*INCLUDESECTION*/
@@ -16,10 +17,13 @@ jnimport:
 type
     AAssetManager {.importc, incompleteStruct.} = object
     AssetManagerPtr = ptr AAssetManager
-    SLObjectItf {.importc, header: "<SLES/OpenSLES.h>", incompleteStruct.} = object
+    SLObjectItfImpl {.importc: "struct SLObjectItf_", header: "<SLES/OpenSLES.h>", incompleteStruct.} = object
+    SLObjectItf {.importc: "SLObjectItf", header: "<SLES/OpenSLES.h>", incompleteStruct.} = ptr ptr SLObjectItfImpl
     SLEngineItf {.importc, header: "<SLES/OpenSLES.h>", incompleteStruct.} = object
 
 type Sound* = ref object
+    # player: SLObjectItf
+    path: string
     player: SLObjectItf
 
 var engineInited = false
@@ -31,9 +35,7 @@ var gOutputMix : SLObjectItf
 proc initSoundEngineWithActivity*(a: jobject) =
     var am = Activity(a).getApplication().getAssets()
     let env = jnim.currentEnv
-    {.emit: """
-    `gAssetManager` = AAssetManager_fromJava(`env`, `am`);
-    """.}
+    {.emit: "`gAssetManager` = AAssetManager_fromJava(`env`, `am`);".}
 
 proc initEngine() =
     if engineInited: return
@@ -85,12 +87,88 @@ proc loadResourceDescriptor(path: cstring): ResourseDescriptor =
     if not loaded:
         raise newException(Exception, "File " & $path & " could not be loaded")
 
-proc newSoundWithFile*(path: string): Sound =
-    initEngine()
-    result.new()
-    var pl : SLObjectItf
+proc setLooping*(s: Sound, flag: bool) =
+    if not s.player.isNil:
+        let pl = s.player
+        {.emit: """
+        SLSeekItf seek;
+        SLresult res = (*`pl`)->GetInterface(`pl`, SL_IID_SEEK, &seek);
+        if (res == SL_RESULT_SUCCESS) {
+            (*seek)->SetLoop(seek, `flag`, 0, SL_TIME_UNKNOWN);
+        }
+        """.}
 
-    let rd = loadResourceDescriptor(path)
+type PlayerPool = seq[SLObjectItf]
+
+var playerPool: PlayerPool = @[]
+
+const
+    SL_PLAYSTATE_STOPPED = 0x00000001'u32
+    SL_PLAYSTATE_PAUSED = 0x00000002'u32
+    SL_PLAYSTATE_PLAYING = 0x00000003'u32
+
+proc playState(pl: SLObjectItf): uint32 =
+    if not pl.isNil:
+        var state: uint32
+        {.emit: """
+        SLPlayItf player;
+        int res = (*`pl`)->GetInterface(`pl`, SL_IID_PLAY, &player);
+        res = (*player)->GetPlayState(player, &`state`);
+        """.}
+        return state
+
+proc playState*(s: Sound): uint32 =
+    return s.player.playState()
+
+proc isPlaying*(s: Sound): bool =
+    return s.player.playState() == SL_PLAYSTATE_PLAYING
+
+proc isPaused*(s: Sound): bool =
+    return s.player.playState() == SL_PLAYSTATE_PAUSED
+
+proc isStopped*(s: Sound): bool =
+    return s.player.playState() == SL_PLAYSTATE_STOPPED
+
+proc canBeFree(p: SLObjectItf): bool =
+    return p.playState() != SL_PLAYSTATE_PLAYING
+
+proc setPlayState(pl: SLObjectItf, state: uint32) =
+    if not pl.isNil():
+        {.emit: """
+        SLPlayItf player;
+        int res = (*`pl`)->GetInterface(`pl`, SL_IID_PLAY, &player);
+        SLSeekItf seek;
+        res = (*`pl`)->GetInterface(`pl`, SL_IID_SEEK, &seek);
+        (*seek)->SetLoop(seek, SL_BOOLEAN_FALSE, 0, SL_TIME_UNKNOWN);
+        (*player)->SetPlayState(player, `state`);
+        """.}
+
+proc setPlayState(s: Sound, state: uint32) =
+    if not s.player.isNil:
+        let pl = s.player
+        pl.setPlayState(state)
+
+proc stop*(s: Sound) {.inline.} =
+    s.setPlayState(SL_PLAYSTATE_STOPPED)
+
+proc play*(s: Sound) =
+    # Define which sound is stopped and can be reused
+    var sindex = -1
+    var pl: SLObjectItf
+    var slres = 0'u32
+
+    for i in 0 ..< playerPool.len():
+        if canBeFree(playerPool[i]):
+            sindex = i
+            break
+    if sindex != -1:
+        pl = playerPool[sindex]
+        s.stop()
+        {.emit: """
+            (*`pl`)->Destroy(`pl`);
+        """.}
+
+    let rd = loadResourceDescriptor(s.path)
 
     {.emit: """
     SLDataLocator_AndroidFD locatorIn = {
@@ -114,48 +192,72 @@ proc newSoundWithFile*(path: string): Sound =
     };
 
     SLDataSink audioSnk = {&dataLocatorOut, NULL};
-    const SLInterfaceID pIDs[2] = {SL_IID_PLAY, SL_IID_SEEK};
-    const SLboolean pIDsRequired[2] = {SL_BOOLEAN_TRUE, SL_BOOLEAN_TRUE};
-    SLresult res = (*`gEngine`)->CreateAudioPlayer(`gEngine`, &`pl`, &audioSrc, &audioSnk, 2, pIDs, pIDsRequired);
-    res = (*`pl`)->Realize(`pl`, SL_BOOLEAN_FALSE);
-    """.}
-    result.player = pl
-
-proc setLooping*(s: Sound, flag: bool) =
-    let pl = s.player
-    {.emit: """
-    SLPlayItf player;
-    SLresult res = (*`pl`)->GetInterface(`pl`, SL_IID_PLAY, &player);
-    if (res == SL_RESULT_SUCCESS) {
-        SLmillisecond duration;
-        res = player->GetDuration(player, &duration);
-        if (res == SL_RESULT_SUCCESS) {
-            SLSeekItf seek;
-            res = (*`pl`)->GetInterface(`pl`, SL_IID_SEEK, &seek);
-            if (res == SL_RESULT_SUCCESS) {
-                (*seek)->SetLoop(seek, `flag`, 0, duration);
-            }
-        }
+    const SLInterfaceID pIDs[] = {SL_IID_PLAY, SL_IID_SEEK, SL_IID_VOLUME};
+    const SLboolean pIDsRequired[] = {SL_BOOLEAN_TRUE, SL_BOOLEAN_TRUE, SL_BOOLEAN_TRUE};
+    `slres` = (*`gEngine`)->CreateAudioPlayer(`gEngine`, &`pl`, &audioSrc, &audioSnk, 3, pIDs, pIDsRequired);
+    if (`slres` == SL_RESULT_SUCCESS) {
+        `slres` = (*`pl`)->Realize(`pl`, SL_BOOLEAN_FALSE);
     }
     """.}
+    # TODO: We should rework this implmentation to support more than 32 players!
+    #if slres != 0:
+    #    raise newException(Exception, "Error creating audio player for file: " & path & ": " & $slres)
+    s.player = pl
 
-const SL_PLAYSTATE_STOPPED = 0x00000001'u32
-const SL_PLAYSTATE_PAUSED = 0x00000002'u32
-const SL_PLAYSTATE_PLAYING = 0x00000003'u32
+    if sindex == -1:
+        playerPool.add(pl)
 
-proc setPlayState(s: Sound, state: uint32) =
-    let pl = s.player
-    {.emit: """
-    SLPlayItf player;
-    int res = (*`pl`)->GetInterface(`pl`, SL_IID_PLAY, &player);
-    SLSeekItf seek;
-    res = (*`pl`)->GetInterface(`pl`, SL_IID_SEEK, &seek);
-    (*seek)->SetLoop(seek, SL_BOOLEAN_FALSE, 0, SL_TIME_UNKNOWN);
-    (*player)->SetPlayState(player, `state`);
-    """.}
-
-proc play*(s: Sound) {.inline.} =
     s.setPlayState(SL_PLAYSTATE_PLAYING)
 
-proc stop*(s: Sound) {.inline.} =
-    s.setPlayState(SL_PLAYSTATE_STOPPED)
+proc newSoundWithFile*(path: string): Sound =
+    ## Play sound from inside APK file
+    initEngine()
+    result.new
+    result.path = path
+    result.player = nil
+
+proc gainToAttenuation(gain: float): float {.inline.} =
+    return if gain < 0.01: -96.0 else: 20 * log10(gain)
+
+proc attenuationToGain(a: float): float {.inline.} =
+    if a <= -96.0: return 0
+    result = a / 20
+    result = pow(10, result)
+
+proc duration*(s: Sound): float =
+    if not s.player.isNil:
+        var msDuration : uint32
+        let pl = s.player
+        {.emit: """
+        SLPlayItf player;
+        int res = (*`pl`)->GetInterface(`pl`, SL_IID_PLAY, &player);
+        if (res == SL_RESULT_SUCCESS) {
+            res = (*player)->GetDuration(player, &`msDuration`);
+        }
+        """.}
+        result = float(msDuration) * 0.001
+
+proc `gain=`*(s: Sound, v: float) =
+    if not s.player.isNil:
+        let a = gainToAttenuation(v)
+        let pl = s.player
+        {.emit: """
+        SLVolumeItf volume;
+        int res = (*`pl`)->GetInterface(`pl`, SL_IID_VOLUME, &volume);
+        if (res == SL_RESULT_SUCCESS) {
+            (*volume)->SetVolumeLevel(volume, `a` * 100.0);
+        }
+        """.}
+
+proc gain*(s: Sound): float =
+    if not s.player.isNil:
+        let pl = s.player
+        var mb : int16
+        {.emit: """
+        SLVolumeItf volume;
+        int res = (*`pl`)->GetInterface(`pl`, SL_IID_VOLUME, &volume);
+        if (res == SL_RESULT_SUCCESS) {
+            (*volume)->GetVolumeLevel(volume, &`mb`);
+        }
+        """.}
+        result = attenuationToGain(mb.float / 100)
