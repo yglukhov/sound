@@ -38,7 +38,9 @@ template createContextIfNeeded() =
         createContext()
         contextInited = true
 
-proc initWithArrayBuffer(s: Sound, ab: ref RootObj) =
+proc initWithArrayBuffer(s: Sound, ab: ref RootObj, handler: proc() = nil) =
+    createContextIfNeeded()
+
     var source : ref RootObj
     var gain : ref RootObj
     {.emit: """
@@ -50,21 +52,28 @@ proc initWithArrayBuffer(s: Sound, ab: ref RootObj) =
 
     window.__nimsound_context.decodeAudioData(`ab`, function(buffer) {
         `source`.buffer = buffer;
+        if (`handler` != null) `handler`();
       },
 
-      function(e){"Error with decoding audio data" + e.err});
+      function(e) {
+        if (`handler` != null) `handler`();
+        console.log("Error with decoding audio data" + e.err);
+        });
     """.}
     s.source = source
     s.gain = gain
     s.freshSource = true
 
 proc newSoundWithArrayBuffer*(ab: ref RootObj): Sound =
-    createContextIfNeeded()
     result.new()
     result.initWithArrayBuffer(ab)
 
+proc newSoundWithArrayBufferAsync*(ab: ref RootObj, handler: proc(s: Sound)) =
+    let s = Sound.new()
+    s.initWithArrayBuffer(ab, proc() =
+        handler(s))
+
 proc newSoundWithURL*(url: string): Sound =
-    createContextIfNeeded()
     result.new()
     let req = newXMLHTTPRequest()
     req.open("GET", url)
@@ -86,6 +95,7 @@ proc setLooping*(s: Sound, flag: bool) =
 proc recreateSource(s: Sound) =
     var source {.hint[XDeclaredButNotUsed]: off.} = s.source
     let gain {.hint[XDeclaredButNotUsed]: off.} = s.gain
+
     {.emit: """
     var newSource = window.__nimsound_context.createBufferSource();
     newSource.connect(`gain`);
@@ -96,13 +106,26 @@ proc recreateSource(s: Sound) =
     s.source = source
     s.freshSource = true
 
+proc duration*(s: Sound): float =
+    let source = s.source
+    {.emit: "`result` = `source`.buffer.duration;".}
+
 proc play*(s: Sound) =
     if not s.freshSource: s.recreateSource()
     let source {.hint[XDeclaredButNotUsed]: off.} = s.source
-    {.emit: "`source`.start(0);".}
+    {.emit: "`source`.start();".}
     s.freshSource = false
 
 proc stop*(s: Sound) =
-    let source {.hint[XDeclaredButNotUsed]: off.} = s.source
-    {.emit: "`source`.stop(0);".}
-    s.recreateSource()
+    if not s.freshSource:
+        let source {.hint[XDeclaredButNotUsed]: off.} = s.source
+        {.emit: "`source`.stop();".}
+        s.recreateSource()
+
+proc `gain=`*(s: Sound, v: float) =
+    let g = s.gain
+    {.emit: "`g`.gain.value = `v`;".}
+
+proc gain*(s: Sound): float =
+    let g = s.gain
+    {.emit: "`result` = `g`.gain.value;".}

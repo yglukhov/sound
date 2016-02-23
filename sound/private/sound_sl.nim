@@ -1,5 +1,5 @@
-import math
 import jnim
+import math
 
 {.emit: """/*INCLUDESECTION*/
 #include <SLES/OpenSLES_Android.h>
@@ -22,9 +22,8 @@ type
     SLEngineItf {.importc, header: "<SLES/OpenSLES.h>", incompleteStruct.} = object
 
 type Sound* = ref object
-    # player: SLObjectItf
-    path: string
     player: SLObjectItf
+    path: string
 
 var engineInited = false
 
@@ -68,6 +67,13 @@ proc initEngine() =
     result = (*`gEngine`)->CreateOutputMix(`gEngine`, &`gOutputMix`, 0, pOutputMixIDs, pOutputMixRequired);
     result = (*`gOutputMix`)->Realize(`gOutputMix`, SL_BOOLEAN_FALSE);
     """.}
+
+proc newSoundWithFile*(path: string): Sound =
+    ## Play sound from inside APK file
+    initEngine()
+    result.new
+    result.path = path
+    result.player = nil
 
 type ResourseDescriptor {.exportc.} = object
     decriptor: int32
@@ -199,30 +205,12 @@ proc play*(s: Sound) =
         `slres` = (*`pl`)->Realize(`pl`, SL_BOOLEAN_FALSE);
     }
     """.}
-    # TODO: We should rework this implmentation to support more than 32 players!
-    #if slres != 0:
-    #    raise newException(Exception, "Error creating audio player for file: " & path & ": " & $slres)
     s.player = pl
 
     if sindex == -1:
         playerPool.add(pl)
 
     s.setPlayState(SL_PLAYSTATE_PLAYING)
-
-proc newSoundWithFile*(path: string): Sound =
-    ## Play sound from inside APK file
-    initEngine()
-    result.new
-    result.path = path
-    result.player = nil
-
-proc gainToAttenuation(gain: float): float {.inline.} =
-    return if gain < 0.01: -96.0 else: 20 * log10(gain)
-
-proc attenuationToGain(a: float): float {.inline.} =
-    if a <= -96.0: return 0
-    result = a / 20
-    result = pow(10, result)
 
 proc duration*(s: Sound): float =
     if not s.player.isNil:
@@ -236,6 +224,14 @@ proc duration*(s: Sound): float =
         }
         """.}
         result = float(msDuration) * 0.001
+
+proc gainToAttenuation(gain: float): float {.inline.} =
+    return if gain < 0.01: -96.0 else: 20 * log10(gain)
+
+proc attenuationToGain(a: float): float {.inline.} =
+    if a <= -96.0: return 0
+    result = a / 20
+    result = pow(10, result)
 
 proc `gain=`*(s: Sound, v: float) =
     if not s.player.isNil:

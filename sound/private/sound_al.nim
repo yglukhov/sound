@@ -80,6 +80,15 @@ proc newSoundWithFile*(path: string): Sound =
     alGenSources(1, addr result.src)
     alSourcei(result.src, AL_BUFFER, cast[ALint](result.buffer))
 
+proc duration*(s: Sound): float =
+    var sizeInBytes, channels, bits, frequency: ALint
+    alGetBufferi(s.buffer, AL_SIZE, addr sizeInBytes)
+    alGetBufferi(s.buffer, AL_CHANNELS, addr channels)
+    alGetBufferi(s.buffer, AL_BITS, addr bits)
+    alGetBufferi(s.buffer, AL_FREQUENCY, addr frequency)
+    let lengthInSamples = sizeInBytes * 8 / (channels * bits)
+    result = float(lengthInSamples) / float(frequency)
+
 proc setLooping*(s: Sound, flag: bool) =
     alSourcei(s.src, AL_LOOPING, ALint(flag))
 
@@ -90,3 +99,11 @@ proc play*(s: Sound) =
 proc stop*(s: Sound) =
     # Attach sound buffer to source
     alSourceStop(s.src)
+
+proc `gain=`*(s: Sound, v: float) =
+    alSourcef(s.src, AL_GAIN, v)
+
+proc gain*(s: Sound): float =
+    var r : ALfloat
+    alGetSourcef(s.src, AL_GAIN, addr r)
+    result = r
