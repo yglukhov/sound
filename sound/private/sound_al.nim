@@ -6,6 +6,7 @@ type Sound* = ref object
     src: ALuint
 
 var contextInited = false
+var alContext : ALCcontext
 
 proc createContext() =
     if contextInited: return
@@ -18,16 +19,16 @@ proc createContext() =
     if device.isNil:
         echo "Could not open device"
 
-    let context = alcCreateContext(device, nil)
-    if context.isNil:
-        echo "Could not create context"
+    alContext = alcCreateContext(device, nil)
+    if alContext.isNil:
+        echo "ERROR: Could not create audio context"
+    else:
+        discard alcMakeContextCurrent(alContext)
 
-    discard alcMakeContextCurrent(context)
-
-    #alGetError(); // clear any error messages
-    alListenerfv(AL_POSITION, addr listenerPos[0])
-    alListenerfv(AL_VELOCITY, addr listenerVel[0])
-    alListenerfv(AL_ORIENTATION, addr listenerOri[0])
+        #alGetError(); // clear any error messages
+        alListenerfv(AL_POSITION, addr listenerPos[0])
+        alListenerfv(AL_VELOCITY, addr listenerVel[0])
+        alListenerfv(AL_ORIENTATION, addr listenerOri[0])
 
 proc finalizeSound(s: Sound) =
     if s.src != 0: alDeleteSources(1, addr s.src)
@@ -74,13 +75,15 @@ proc newSoundWithFile*(path: string): Sound =
 
     result.new(finalizeSound)
 
-    alGenBuffers(1, addr result.buffer)
-    # Upload sound data to buffer
-    alBufferData(result.buffer, format, addr buffer[0], ALsizei(buffer.len * sizeof(buffer[0])), freq)
-    alGenSources(1, addr result.src)
-    alSourcei(result.src, AL_BUFFER, cast[ALint](result.buffer))
+    if not alContext.isNil:
+        alGenBuffers(1, addr result.buffer)
+        # Upload sound data to buffer
+        alBufferData(result.buffer, format, addr buffer[0], ALsizei(buffer.len * sizeof(buffer[0])), freq)
+        alGenSources(1, addr result.src)
+        alSourcei(result.src, AL_BUFFER, cast[ALint](result.buffer))
 
 proc duration*(s: Sound): float =
+    if s.buffer == 0: return 0
     var sizeInBytes, channels, bits, frequency: ALint
     alGetBufferi(s.buffer, AL_SIZE, addr sizeInBytes)
     alGetBufferi(s.buffer, AL_CHANNELS, addr channels)
@@ -90,20 +93,23 @@ proc duration*(s: Sound): float =
     result = float(lengthInSamples) / float(frequency)
 
 proc setLooping*(s: Sound, flag: bool) =
-    alSourcei(s.src, AL_LOOPING, ALint(flag))
+    if s.src != 0:
+        alSourcei(s.src, AL_LOOPING, ALint(flag))
 
 proc play*(s: Sound) =
-    # Attach sound buffer to source
-    alSourcePlay(s.src)
+    if s.src != 0:
+        alSourcePlay(s.src)
 
 proc stop*(s: Sound) =
-    # Attach sound buffer to source
-    alSourceStop(s.src)
+    if s.src != 0:
+        alSourceStop(s.src)
 
 proc `gain=`*(s: Sound, v: float) =
-    alSourcef(s.src, AL_GAIN, v)
+    if s.src != 0:
+        alSourcef(s.src, AL_GAIN, v)
 
 proc gain*(s: Sound): float =
-    var r : ALfloat
-    alGetSourcef(s.src, AL_GAIN, addr r)
-    result = r
+    if s.src != 0:
+        var r : ALfloat
+        alGetSourcef(s.src, AL_GAIN, addr r)
+        result = r
