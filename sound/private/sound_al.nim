@@ -105,7 +105,7 @@ proc stop*(s: Sound) =
         alSourceStop(s.src)
 
 proc `gain=`*(s: Sound, v: float) =
-    if s.src != 0:
+    if not s.isNil and not s.src != 0:
         alSourcef(s.src, AL_GAIN, v)
 
 proc gain*(s: Sound): float =
