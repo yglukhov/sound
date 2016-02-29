@@ -234,7 +234,7 @@ proc attenuationToGain(a: float): float {.inline.} =
     result = pow(10, result)
 
 proc `gain=`*(s: Sound, v: float) =
-    if not s.player.isNil:
+    if not s.isNil and not s.player.isNil:
         let a = gainToAttenuation(v)
         let pl = s.player
         {.emit: """
