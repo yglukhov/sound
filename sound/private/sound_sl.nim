@@ -104,9 +104,7 @@ proc setLooping*(s: Sound, flag: bool) =
         }
         """.}
 
-type PlayerPool = seq[SLObjectItf]
-
-var playerPool: PlayerPool = @[]
+var activeSounds = newSeq[Sound]()
 
 const
     SL_PLAYSTATE_STOPPED = 0x00000001'u32
@@ -135,27 +133,37 @@ proc isPaused*(s: Sound): bool =
 proc isStopped*(s: Sound): bool =
     return s.player.playState() == SL_PLAYSTATE_STOPPED
 
-proc canBeFree(p: SLObjectItf): bool =
-    return p.playState() != SL_PLAYSTATE_PLAYING
+proc canBeFree(s: Sound): bool =
+    return (not s.player.isNil) and s.player.playState() != SL_PLAYSTATE_PLAYING
 
-proc setPlayState(pl: SLObjectItf, state: uint32) =
-    if not pl.isNil():
-        {.emit: """
-        SLPlayItf player;
-        int res = (*`pl`)->GetInterface(`pl`, SL_IID_PLAY, &player);
-        SLSeekItf seek;
-        res = (*`pl`)->GetInterface(`pl`, SL_IID_SEEK, &seek);
-        (*seek)->SetLoop(seek, SL_BOOLEAN_FALSE, 0, SL_TIME_UNKNOWN);
-        (*player)->SetPlayState(player, `state`);
-        """.}
+proc setPlayState(pl: SLObjectItf not nil, state: uint32) =
+    {.emit: """
+    SLPlayItf player;
+    int res = (*`pl`)->GetInterface(`pl`, SL_IID_PLAY, &player);
+    SLSeekItf seek;
+    res = (*`pl`)->GetInterface(`pl`, SL_IID_SEEK, &seek);
+    (*seek)->SetLoop(seek, SL_BOOLEAN_FALSE, 0, SL_TIME_UNKNOWN);
+    (*player)->SetPlayState(player, `state`);
+    """.}
 
 proc setPlayState(s: Sound, state: uint32) =
-    if not s.player.isNil:
-        let pl = s.player
+    let pl = s.player
+    if not pl.isNil:
         pl.setPlayState(state)
 
 proc stop*(s: Sound) {.inline.} =
     s.setPlayState(SL_PLAYSTATE_STOPPED)
+
+proc collectInactiveSounds() =
+    for i in 0 ..< activeSounds.len():
+        if canBeFree(activeSounds[i]):
+            let pl = activeSounds[i].player
+            {.emit: """
+                (*`pl`)->Destroy(`pl`);
+            """.}
+            activeSounds[i].player = nil
+            activeSounds.del(i)
+            break
 
 proc play*(s: Sound) =
     # Define which sound is stopped and can be reused
@@ -163,16 +171,8 @@ proc play*(s: Sound) =
     var pl: SLObjectItf
     var slres = 0'u32
 
-    for i in 0 ..< playerPool.len():
-        if canBeFree(playerPool[i]):
-            sindex = i
-            break
-    if sindex != -1:
-        pl = playerPool[sindex]
-        s.stop()
-        {.emit: """
-            (*`pl`)->Destroy(`pl`);
-        """.}
+    s.stop()
+    collectInactiveSounds()
 
     let rd = loadResourceDescriptor(s.path)
 
@@ -205,17 +205,18 @@ proc play*(s: Sound) =
         `slres` = (*`pl`)->Realize(`pl`, SL_BOOLEAN_FALSE);
     }
     """.}
-    s.player = pl
 
-    if sindex == -1:
-        playerPool.add(pl)
-
-    s.setPlayState(SL_PLAYSTATE_PLAYING)
+    if slres == 0:
+        s.player = pl
+        activeSounds.add(s)
+        s.setPlayState(SL_PLAYSTATE_PLAYING)
+    else:
+        s.player = nil
 
 proc duration*(s: Sound): float =
-    if not s.player.isNil:
+    let pl = s.player
+    if not pl.isNil:
         var msDuration : uint32
-        let pl = s.player
         {.emit: """
         SLPlayItf player;
         int res = (*`pl`)->GetInterface(`pl`, SL_IID_PLAY, &player);
