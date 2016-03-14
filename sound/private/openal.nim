@@ -17,29 +17,35 @@ else:
 when defined(macosx) or defined(ios):
     {.passL: "-framework OpenAL".}
 
-const AL_FORMAT_MONO8* : cint =                          0x1100
-const AL_FORMAT_MONO16* : cint =                         0x1101
-const AL_FORMAT_STEREO8* : cint =                        0x1102
-const AL_FORMAT_STEREO16* : cint =                       0x1103
+const
+    AL_FORMAT_MONO8* : cint =                          0x1100
+    AL_FORMAT_MONO16* : cint =                         0x1101
+    AL_FORMAT_STEREO8* : cint =                        0x1102
+    AL_FORMAT_STEREO16* : cint =                       0x1103
 
-const AL_BUFFER* : ALenum =                              0x1009
+    AL_BUFFER* : ALenum =                              0x1009
 
-const AL_POSITION* : ALenum =                            0x1004
+    AL_POSITION* : ALenum =                            0x1004
 
-const AL_DIRECTION* : ALenum =                           0x1005
+    AL_DIRECTION* : ALenum =                           0x1005
 
-const AL_VELOCITY* : ALenum =                            0x1006
-const AL_ORIENTATION* : ALenum =                         0x100F
+    AL_VELOCITY* : ALenum =                            0x1006
+    AL_ORIENTATION* : ALenum =                         0x100F
 
-const AL_LOOPING* : ALenum =                             0x1007
+    AL_LOOPING* : ALenum =                             0x1007
 
-const AL_FREQUENCY* : ALenum =                           0x2001
-const AL_BITS* : ALenum =                                0x2002
-const AL_CHANNELS* : ALenum =                            0x2003
-const AL_SIZE* : ALenum =                                0x2004
+    AL_FREQUENCY* : ALenum =                           0x2001
+    AL_BITS* : ALenum =                                0x2002
+    AL_CHANNELS* : ALenum =                            0x2003
+    AL_SIZE* : ALenum =                                0x2004
 
-const AL_GAIN* : ALenum =                                0x100A
+    AL_GAIN* : ALenum =                                0x100A
 
+    AL_SOURCE_STATE* : ALenum =                        0x1010
+    AL_INITIAL* : ALenum =                             0x1011
+    AL_PLAYING* : ALenum =                             0x1012
+    AL_PAUSED* : ALenum =                              0x1013
+    AL_STOPPED* : ALenum =                             0x1014
 
 proc alGenBuffers*(n: ALsizei , buffers: ptr ALuint) {.alimport.}
 proc alGenSources*(n: ALsizei, sources: ptr ALuint) {.alimport.}
@@ -48,7 +54,7 @@ proc alSourcei*(sid: ALuint, param: ALenum, value: ALint) {.alimport.}
 proc alSourcef*(sid: ALuint, param: ALenum, value: ALfloat) {.alimport.}
 
 proc alGetSourcef*(sid: ALuint, param: ALenum, value: ptr ALfloat) {.alimport.}
-
+proc alGetSourcei*(sid: ALuint, param: ALenum, value: ptr ALint) {.alimport.}
 
 proc alSourcePlay*(sid: ALuint) {.alimport.}
 proc alSourceStop*(sid: ALuint) {.alimport.}

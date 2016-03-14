@@ -4,9 +4,13 @@ import stb_vorbis
 type Sound* = ref object
     buffer: ALuint
     src: ALuint
+    mGain: ALfloat
+    mLooping: bool
 
 var contextInited = false
 var alContext : ALCcontext
+
+var activeSounds = newSeq[Sound]()
 
 proc createContext() =
     if contextInited: return
@@ -56,13 +60,13 @@ proc newSoundWithFile*(path: string): Sound =
     #var bitStream: cint
     var bytes : clong
 
-    const LE_OGG_BUFFER_SIZE = 32768
+    const OGG_BUFFER_SIZE = 32768
 
     var curOffset = 0
     while true:
         # Read up to a buffer's worth of decoded sound data
-        buffer.setLen(curOffset + LE_OGG_BUFFER_SIZE)
-        bytes = stb_vorbis_get_samples_short_interleaved(v, i.channels, addr buffer[curOffset], LE_OGG_BUFFER_SIZE) * i.channels
+        buffer.setLen(curOffset + OGG_BUFFER_SIZE)
+        bytes = stb_vorbis_get_samples_short_interleaved(v, i.channels, addr buffer[curOffset], OGG_BUFFER_SIZE) * i.channels
 
 #        bytes = read(addr f, cast[cstring](addr buffer[curOffset]), LE_OGG_BUFFER_SIZE, endian, 2, 1, addr bitStream)
         if bytes > 0:
@@ -74,13 +78,19 @@ proc newSoundWithFile*(path: string): Sound =
     stb_vorbis_close(v)
 
     result.new(finalizeSound)
+    result.mGain = 1
 
     if not alContext.isNil:
         alGenBuffers(1, addr result.buffer)
         # Upload sound data to buffer
         alBufferData(result.buffer, format, addr buffer[0], ALsizei(buffer.len * sizeof(buffer[0])), freq)
-        alGenSources(1, addr result.src)
-        alSourcei(result.src, AL_BUFFER, cast[ALint](result.buffer))
+        #alGenSources(1, addr result.src)
+        #alSourcei(result.src, AL_BUFFER, cast[ALint](result.buffer))
+
+proc isSourcePlaying(src: ALuint): bool =
+    var state: ALenum
+    alGetSourcei(src, AL_SOURCE_STATE, addr state)
+    result = state == AL_PLAYING
 
 proc duration*(s: Sound): float =
     if s.buffer == 0: return 0
@@ -93,23 +103,42 @@ proc duration*(s: Sound): float =
     result = float(lengthInSamples) / float(frequency)
 
 proc setLooping*(s: Sound, flag: bool) =
+    s.mLooping = flag
     if s.src != 0:
         alSourcei(s.src, AL_LOOPING, ALint(flag))
 
-proc play*(s: Sound) =
-    if s.src != 0:
-        alSourcePlay(s.src)
+proc reclaimInactiveSource(): ALuint =
+    for i in 0 ..< activeSounds.len:
+        let src = activeSounds[i].src
+        if not src.isSourcePlaying:
+            result = src
+            activeSounds[i].src = 0
+            activeSounds.del(i)
+            break
 
 proc stop*(s: Sound) =
     if s.src != 0:
         alSourceStop(s.src)
 
+proc play*(s: Sound) =
+    if s.buffer != 0:
+        if s.src == 0:
+            s.src = reclaimInactiveSource()
+            if s.src == 0:
+                alGenSources(1, addr s.src)
+        else:
+            alSourceStop(s.src)
+
+        if s.src != 0:
+            alSourcei(s.src, AL_BUFFER, cast[ALint](s.buffer))
+            alSourcef(s.src, AL_GAIN, s.mGain)
+            alSourcei(s.src, AL_LOOPING, ALint(s.mLooping))
+            alSourcePlay(s.src)
+            activeSounds.add(s)
+
 proc `gain=`*(s: Sound, v: float) =
+    s.mGain = v
     if s.src != 0:
         alSourcef(s.src, AL_GAIN, v)
 
-proc gain*(s: Sound): float =
-    if s.src != 0:
-        var r : ALfloat
-        alGetSourcef(s.src, AL_GAIN, addr r)
-        result = r
+proc gain*(s: Sound): float = s.mGain
