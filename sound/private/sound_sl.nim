@@ -24,6 +24,8 @@ type
 type Sound* = ref object
     player: SLObjectItf
     path: string
+    mGain: float
+    mLooping: bool
 
 var engineInited = false
 
@@ -74,6 +76,7 @@ proc newSoundWithFile*(path: string): Sound =
     result.new
     result.path = path
     result.player = nil
+    result.mGain = 1
 
 type ResourseDescriptor {.exportc.} = object
     decriptor: int32
@@ -93,16 +96,35 @@ proc loadResourceDescriptor(path: cstring): ResourseDescriptor =
     if not loaded:
         raise newException(Exception, "File " & $path & " could not be loaded")
 
+proc gainToAttenuation(gain: float): float {.inline.} =
+    return if gain < 0.01: -96.0 else: 20 * log10(gain)
+
+proc setGain(pl: SLObjectItf not nil, v: float) =
+    let a = gainToAttenuation(v)
+    {.emit: """
+    SLVolumeItf volume;
+    int res = (*`pl`)->GetInterface(`pl`, SL_IID_VOLUME, &volume);
+    if (res == SL_RESULT_SUCCESS) {
+        (*volume)->SetVolumeLevel(volume, `a` * 100.0);
+    }
+    """.}
+
+    discard
+
+proc setLooping(pl: SLObjectItf not nil, flag: bool) =
+    {.emit: """
+    SLSeekItf seek;
+    SLresult res = (*`pl`)->GetInterface(`pl`, SL_IID_SEEK, &seek);
+    if (res == SL_RESULT_SUCCESS) {
+        (*seek)->SetLoop(seek, `flag`, 0, SL_TIME_UNKNOWN);
+    }
+    """.}
+
 proc setLooping*(s: Sound, flag: bool) =
-    if not s.player.isNil:
-        let pl = s.player
-        {.emit: """
-        SLSeekItf seek;
-        SLresult res = (*`pl`)->GetInterface(`pl`, SL_IID_SEEK, &seek);
-        if (res == SL_RESULT_SUCCESS) {
-            (*seek)->SetLoop(seek, `flag`, 0, SL_TIME_UNKNOWN);
-        }
-        """.}
+    s.mLooping = flag
+    let pl = s.player
+    if not pl.isNil:
+        pl.setLooping(flag)
 
 var activeSounds = newSeq[Sound]()
 
@@ -155,7 +177,7 @@ proc stop*(s: Sound) {.inline.} =
     s.setPlayState(SL_PLAYSTATE_STOPPED)
 
 proc collectInactiveSounds() =
-    for i in 0 ..< activeSounds.len():
+    for i in 0 ..< activeSounds.len:
         if canBeFree(activeSounds[i]):
             let pl = activeSounds[i].player
             {.emit: """
@@ -171,8 +193,12 @@ proc play*(s: Sound) =
     var pl: SLObjectItf
     var slres = 0'u32
 
-    s.stop()
-    collectInactiveSounds()
+    if s.player.isNil:
+        collectInactiveSounds()
+    else:
+        pl = s.player
+        {.emit: "(*`pl`)->Destroy(`pl`);".}
+        s.player = nil
 
     let rd = loadResourceDescriptor(s.path)
 
@@ -208,6 +234,9 @@ proc play*(s: Sound) =
 
     if slres == 0:
         s.player = pl
+        if not pl.isNil:
+            pl.setLooping(s.mLooping)
+            pl.setGain(s.mGain)
         activeSounds.add(s)
         s.setPlayState(SL_PLAYSTATE_PLAYING)
     else:
@@ -226,35 +255,17 @@ proc duration*(s: Sound): float =
         """.}
         result = float(msDuration) * 0.001
 
-proc gainToAttenuation(gain: float): float {.inline.} =
-    return if gain < 0.01: -96.0 else: 20 * log10(gain)
-
+#[
 proc attenuationToGain(a: float): float {.inline.} =
     if a <= -96.0: return 0
     result = a / 20
     result = pow(10, result)
+]#
 
 proc `gain=`*(s: Sound, v: float) =
-    if not s.player.isNil:
-        let a = gainToAttenuation(v)
-        let pl = s.player
-        {.emit: """
-        SLVolumeItf volume;
-        int res = (*`pl`)->GetInterface(`pl`, SL_IID_VOLUME, &volume);
-        if (res == SL_RESULT_SUCCESS) {
-            (*volume)->SetVolumeLevel(volume, `a` * 100.0);
-        }
-        """.}
+    s.mGain = v
+    let pl = s.player
+    if not pl.isNil:
+        pl.setGain(v)
 
-proc gain*(s: Sound): float =
-    if not s.player.isNil:
-        let pl = s.player
-        var mb : int16
-        {.emit: """
-        SLVolumeItf volume;
-        int res = (*`pl`)->GetInterface(`pl`, SL_IID_VOLUME, &volume);
-        if (res == SL_RESULT_SUCCESS) {
-            (*volume)->GetVolumeLevel(volume, &`mb`);
-        }
-        """.}
-        result = attenuationToGain(mb.float / 100)
+proc gain*(s: Sound): float = s.mGain
