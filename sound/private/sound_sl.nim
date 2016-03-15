@@ -109,8 +109,6 @@ proc setGain(pl: SLObjectItf not nil, v: float) =
     }
     """.}
 
-    discard
-
 proc setLooping(pl: SLObjectItf not nil, flag: bool) =
     {.emit: """
     SLSeekItf seek;
@@ -143,6 +141,7 @@ proc playState(pl: SLObjectItf): uint32 =
         """.}
         return state
 
+#[
 proc playState*(s: Sound): uint32 =
     return s.player.playState()
 
@@ -154,9 +153,7 @@ proc isPaused*(s: Sound): bool =
 
 proc isStopped*(s: Sound): bool =
     return s.player.playState() == SL_PLAYSTATE_STOPPED
-
-proc canBeFree(s: Sound): bool =
-    return (not s.player.isNil) and s.player.playState() != SL_PLAYSTATE_PLAYING
+]#
 
 proc setPlayState(pl: SLObjectItf not nil, state: uint32) =
     {.emit: """
@@ -168,37 +165,48 @@ proc setPlayState(pl: SLObjectItf not nil, state: uint32) =
     (*player)->SetPlayState(player, `state`);
     """.}
 
-proc setPlayState(s: Sound, state: uint32) =
+proc destroy(pl: SLObjectItf not nil) =
+    {.emit: "(*`pl`)->Destroy(`pl`);".}
+
+proc stop*(s: Sound) =
     let pl = s.player
     if not pl.isNil:
-        pl.setPlayState(state)
+        pl.setPlayState(SL_PLAYSTATE_STOPPED)
+        for i in 0 ..< activeSounds.len:
+            if s == activeSounds[i]:
+                activeSounds.del(i)
+                break
+        pl.destroy()
+        s.player = nil
 
-proc stop*(s: Sound) {.inline.} =
-    s.setPlayState(SL_PLAYSTATE_STOPPED)
+import nimx.system_logger
 
 proc collectInactiveSounds() =
     for i in 0 ..< activeSounds.len:
-        if canBeFree(activeSounds[i]):
-            let pl = activeSounds[i].player
-            {.emit: """
-                (*`pl`)->Destroy(`pl`);
-            """.}
-            activeSounds[i].player = nil
+        let s = activeSounds[i]
+        let pl = s.player
+        # Some Androids have an bug in OpenSLES that results in reporting
+        # SL_PLAYSTATE_PAUSED for actually active looping players that have gone
+        # through one loop and continue playing, so we cannot dispose looping
+        # players here. Instead they may be disposed in stop().
+        if not pl.isNil and not s.mLooping and pl.playState != SL_PLAYSTATE_PLAYING:
+            pl.destroy()
+            s.player = nil
             activeSounds.del(i)
             break
 
 proc play*(s: Sound) =
     # Define which sound is stopped and can be reused
     var sindex = -1
-    var pl: SLObjectItf
+    var pl = s.player
     var slres = 0'u32
 
-    if s.player.isNil:
+    if pl.isNil:
         collectInactiveSounds()
     else:
-        pl = s.player
-        {.emit: "(*`pl`)->Destroy(`pl`);".}
+        pl.destroy()
         s.player = nil
+        pl = nil
 
     let rd = loadResourceDescriptor(s.path)
 
@@ -237,8 +245,8 @@ proc play*(s: Sound) =
         if not pl.isNil:
             pl.setLooping(s.mLooping)
             pl.setGain(s.mGain)
+            pl.setPlayState(SL_PLAYSTATE_PLAYING)
         activeSounds.add(s)
-        s.setPlayState(SL_PLAYSTATE_PLAYING)
     else:
         s.player = nil
 
