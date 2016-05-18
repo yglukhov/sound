@@ -8,14 +8,13 @@ type
 
 when defined(linux):
   {.passL: "-lopenal"}
-  {.pragma: alimport, importc, header: "<AL/al.h>"}
+  {.pragma: alimport, importc.}
 elif defined(windows):
   {.pragma: alimport, cdecl, dynlib: "OpenAL32.dll", importc.}
 else:
-  {.pragma: alimport, importc, header: "<OpenAL/OpenAL.h>".}
-
-when defined(macosx) or defined(ios):
-    {.passL: "-framework OpenAL".}
+  when defined(macosx) or defined(ios):
+      {.passL: "-framework OpenAL".}
+  {.pragma: alimport, importc.}
 
 const
     AL_FORMAT_MONO8* : cint =                          0x1100
@@ -76,12 +75,10 @@ type
     ALCcontext* = pointer
     ALCboolean* = int8
 
-when defined(linux):
-  {.pragma: alcimport, importc, header: "<AL/al.h>"}
-elif defined(windows):
+when defined(windows):
   {.pragma: alcimport, cdecl, dynlib: "OpenAL32.dll", importc.}
 else:
-  {.pragma: alcimport, importc, header: "<OpenAL/OpenAL.h>".}
+  {.pragma: alcimport, importc.}
 
 proc alcOpenDevice*(devicename: cstring): ALCdevice {.alcimport.}
 proc alcCreateContext*(device: ALCdevice, attrlist: ptr ALCint): ALCcontext {.alcimport.}
