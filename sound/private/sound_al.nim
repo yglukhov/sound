@@ -39,50 +39,53 @@ proc finalizeSound(s: Sound) =
     if s.buffer != 0: alDeleteBuffers(1, addr s.buffer)
 
 proc newSoundWithFile*(path: string): Sound =
-    createContext()
-
-    let v = stb_vorbis_open_filename(path, nil, nil)
-    if v.isNil: return
-    let i = stb_vorbis_get_info(v)
-
-    var format : ALenum
-    if i.channels == 1:
-        format = AL_FORMAT_MONO16
+    when defined(emscripten):
+        return
     else:
-        format = AL_FORMAT_STEREO16
+        createContext()
 
-    let freq = ALsizei(i.sample_rate)
+        let v = stb_vorbis_open_filename(path, nil, nil)
+        if v.isNil: return
+        let i = stb_vorbis_get_info(v)
 
-    var buffer : ptr uint16
-    #var buffer = newSeq[uint16]() # The sound buffer data from file
-
-    #var endian: cint = 0 # 0 for Little-Endian, 1 for Big-Endian
-
-    const OGG_BUFFER_SIZE = 32768
-
-    var curOffset : uint
-    while true:
-        # Read up to a buffer's worth of decoded sound data
-        if buffer.isNil:
-            buffer = cast[ptr uint16](alloc(OGG_BUFFER_SIZE * 2))
+        var format : ALenum
+        if i.channels == 1:
+            format = AL_FORMAT_MONO16
         else:
-            buffer = cast[ptr uint16](realloc(buffer, (curOffset + OGG_BUFFER_SIZE) * 2))
-        let dataRead = stb_vorbis_get_samples_short_interleaved(v, i.channels, cast[ptr uint16](cast[uint](buffer) + curOffset * 2), OGG_BUFFER_SIZE) * i.channels
-        curOffset += uint(dataRead)
-        if dataRead < OGG_BUFFER_SIZE:
-            break
+            format = AL_FORMAT_STEREO16
 
-    stb_vorbis_close(v)
+        let freq = ALsizei(i.sample_rate)
 
-    result.new(finalizeSound)
-    result.mGain = 1
+        var buffer : ptr uint16
+        #var buffer = newSeq[uint16]() # The sound buffer data from file
 
-    if not alContext.isNil:
-        alGenBuffers(1, addr result.buffer)
-        # Upload sound data to buffer
-        alBufferData(result.buffer, format, buffer, ALsizei(curOffset * 2), freq)
+        #var endian: cint = 0 # 0 for Little-Endian, 1 for Big-Endian
 
-    dealloc(buffer)
+        const OGG_BUFFER_SIZE = 32768
+
+        var curOffset : uint
+        while true:
+            # Read up to a buffer's worth of decoded sound data
+            if buffer.isNil:
+                buffer = cast[ptr uint16](alloc(OGG_BUFFER_SIZE * 2))
+            else:
+                buffer = cast[ptr uint16](realloc(buffer, (curOffset + OGG_BUFFER_SIZE) * 2))
+            let dataRead = stb_vorbis_get_samples_short_interleaved(v, i.channels, cast[ptr uint16](cast[uint](buffer) + curOffset * 2), OGG_BUFFER_SIZE) * i.channels
+            curOffset += uint(dataRead)
+            if dataRead < OGG_BUFFER_SIZE:
+                break
+
+        stb_vorbis_close(v)
+
+        result.new(finalizeSound)
+        result.mGain = 1
+
+        if not alContext.isNil:
+            alGenBuffers(1, addr result.buffer)
+            # Upload sound data to buffer
+            alBufferData(result.buffer, format, buffer, ALsizei(curOffset * 2), freq)
+
+        dealloc(buffer)
 
 proc isSourcePlaying(src: ALuint): bool =
     var state: ALenum
