@@ -86,7 +86,7 @@ type ResourseDescriptor {.exportc.} = object
 proc loadResourceDescriptor(path: cstring): ResourseDescriptor =
     var loaded = false
     {.emit: """
-    AAsset* asset = AAssetManager_open(`gAssetManager`, path, AASSET_MODE_UNKNOWN);
+    AAsset* asset = AAssetManager_open(`gAssetManager`, `path`, AASSET_MODE_UNKNOWN);
     if (asset) {
         `loaded` = 1;
         `result`.decriptor = AAsset_openFileDescriptor(asset, &`result`.start, &`result`.length);
