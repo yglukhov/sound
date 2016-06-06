@@ -89,12 +89,12 @@ proc newSoundWithURL*(url: string): Sound =
     req.send()
 
 proc setLooping*(s: Sound, flag: bool) =
-    let source {.hint[XDeclaredButNotUsed]: off.} = s.source
+    let source = s.source
     {.emit: "`source`.loop = `flag`;".}
 
 proc recreateSource(s: Sound) =
-    var source {.hint[XDeclaredButNotUsed]: off.} = s.source
-    let gain {.hint[XDeclaredButNotUsed]: off.} = s.gain
+    var source = s.source
+    let gain = s.gain
 
     {.emit: """
     var newSource = window.__nimsound_context.createBufferSource();
@@ -112,13 +112,13 @@ proc duration*(s: Sound): float =
 
 proc play*(s: Sound) =
     if not s.freshSource: s.recreateSource()
-    let source {.hint[XDeclaredButNotUsed]: off.} = s.source
+    let source = s.source
     {.emit: "`source`.start();".}
     s.freshSource = false
 
 proc stop*(s: Sound) =
     if not s.freshSource:
-        let source {.hint[XDeclaredButNotUsed]: off.} = s.source
+        let source = s.source
         {.emit: "`source`.stop();".}
         s.recreateSource()
 
