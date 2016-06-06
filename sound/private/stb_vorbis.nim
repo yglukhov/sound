@@ -13,11 +13,12 @@ type
 
         max_frame_size*: cint
 
-proc stb_vorbis_open_filename*(filename: cstring, error: ptr cint, alloc_buffer: pointer): Vorbis {.importc.}
-proc stb_vorbis_get_info*(f: Vorbis): VorbisInfo {.importc.}
-proc stb_vorbis_stream_length_in_samples*(f: Vorbis): cuint {.importc.}
-proc stb_vorbis_get_samples_short_interleaved*(f: Vorbis, channels: cint, buffer: ptr uint16, num_shorts: cint): cint {.importc.}
-proc stb_vorbis_close*(f: Vorbis) {.importc.}
+proc stb_vorbis_open_filename*(filename: cstring, error: ptr cint, alloc_buffer: pointer): Vorbis {.importc, noconv.}
+proc stb_vorbis_open_memory*(data: pointer, len: cint, error: ptr cint, alloc_buffer: pointer): Vorbis {.importc, noconv.}
+proc stb_vorbis_get_info*(f: Vorbis): VorbisInfo {.importc, noconv.}
+proc stb_vorbis_stream_length_in_samples*(f: Vorbis): cuint {.importc, noconv.}
+proc stb_vorbis_get_samples_short_interleaved*(f: Vorbis, channels: cint, buffer: ptr uint16, num_shorts: cint): cint {.importc, noconv.}
+proc stb_vorbis_close*(f: Vorbis) {.importc, noconv.}
 
 {.emit: """
 // Ogg Vorbis audio decoder - v1.07 - public domain
