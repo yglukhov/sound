@@ -258,7 +258,9 @@ proc duration*(s: Sound): float =
         SLPlayItf player;
         int res = (*`pl`)->GetInterface(`pl`, SL_IID_PLAY, &player);
         if (res == SL_RESULT_SUCCESS) {
-            res = (*player)->GetDuration(player, &`msDuration`);
+            while (`msDuration` == 0xFFFFFFFF && res == SL_RESULT_SUCCESS){
+                res = (*player)->GetDuration(player, &`msDuration`);
+            }
         }
         """.}
         result = float(msDuration) * 0.001
