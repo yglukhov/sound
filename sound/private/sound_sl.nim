@@ -1,5 +1,6 @@
 import jnim
 import math
+import times
 
 {.emit: """/*INCLUDESECTION*/
 #include <SLES/OpenSLES_Android.h>
@@ -33,6 +34,9 @@ var gAssetManager : AssetManagerPtr = nil
 var gEngine : SLEngineItf # = nil
 var gOutputMix : SLObjectItf
 
+const TRASH_TIMEOUT = 0.5
+var gTrash = newSeq[tuple[item: SLObjectItf, time: float]]()
+
 proc initSoundEngineWithActivity*(a: jobject) =
     var am = Activity(a).getApplication().getAssets()
     let env = jnim.currentEnv
@@ -43,7 +47,6 @@ proc initEngine() =
     if gAssetManager.isNil:
         raise newException(Exception, "Sound engine on Android should be initialized by initSoundEngineWithActivity.")
     engineInited = true
-
     {.emit:"""
     SLObjectItf engine;
     const SLInterfaceID pIDs[1] = {SL_IID_ENGINE};
@@ -165,8 +168,25 @@ proc setPlayState(pl: SLObjectItf not nil, state: uint32) =
     (*player)->SetPlayState(player, `state`);
     """.}
 
+proc collectTrash()=
+    let curTime = epochTime()
+    var i = 0
+    while i < gTrash.len:
+        var (item, time) = gTrash[i]
+        if abs(time - curTime) > TRASH_TIMEOUT:
+            {.emit: "(*`item`)->Destroy(`item`);".}
+            gTrash.delete(i)
+        else:
+            inc i
+
+# If destroy openSL object immediately,it may cause dead lock.
+# It's a system issue ;(
+# For more information:
+# https://groups.google.com/forum/#!msg/android-ndk/zANdS2n2cQI/AT6q1F3nNGIJ
+
 proc destroy(pl: SLObjectItf not nil) =
-    {.emit: "(*`pl`)->Destroy(`pl`);".}
+    collectTrash()
+    gTrash.add( (item: pl, time: epochTime()) )
 
 proc stop*(s: Sound) =
     let pl = s.player
@@ -178,8 +198,6 @@ proc stop*(s: Sound) =
                 break
         pl.destroy()
         s.player = nil
-
-import nimx.system_logger
 
 proc collectInactiveSounds() =
     for i in 0 ..< activeSounds.len:
@@ -200,16 +218,13 @@ proc play*(s: Sound) =
     var sindex = -1
     var pl = s.player
     var slres = 0'u32
-
     if pl.isNil:
         collectInactiveSounds()
     else:
         pl.destroy()
         s.player = nil
         pl = nil
-
     let rd = loadResourceDescriptor(s.path)
-
     {.emit: """
     SLDataLocator_AndroidFD locatorIn = {
         SL_DATALOCATOR_ANDROIDFD,
@@ -239,7 +254,6 @@ proc play*(s: Sound) =
         `slres` = (*`pl`)->Realize(`pl`, SL_BOOLEAN_FALSE);
     }
     """.}
-
     if slres == 0:
         s.player = pl
         if not pl.isNil:
