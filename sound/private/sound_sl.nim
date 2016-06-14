@@ -253,7 +253,7 @@ proc play*(s: Sound) =
 proc duration*(s: Sound): float =
     let pl = s.player
     if not pl.isNil:
-        var msDuration : uint32
+        var msDuration : uint32 = 0xFFFFFFFFu32
         {.emit: """
         SLPlayItf player;
         int res = (*`pl`)->GetInterface(`pl`, SL_IID_PLAY, &player);
