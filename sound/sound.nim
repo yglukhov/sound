@@ -2,7 +2,7 @@ when defined(macosx) or defined(ios) or defined(windows):
     include private.sound_al
 elif defined(android):
     include private.sound_sl
-elif defined(js):
+elif defined(js) or defined(emscripten):
     include private.sound_js
 elif defined(linux):
     include private.sound_al

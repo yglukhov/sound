@@ -1,74 +1,93 @@
 import async_http_request
 
+import jsbind
+
+type
+    AudioContext = ref object of JSObj
+    AudioNode = ref object of JSObj
+    GainNode = ref object of AudioNode
+    AudioBufferSourceNode = ref object of AudioNode
+    AudioBuffer = ref object of JSObj
+    ArrayBuffer* = ref object of JSObj
+    AudioParam = ref object of JSObj
+
+proc newAudioContext(): AudioContext {.jsimportgWithName: "function(){AudioContext = (window.AudioContext || window.webkitAudioContext || null); return (AudioContext)?(new AudioContext):null;}".}
+
+proc createGain(a: AudioContext): GainNode {.jsimport.}
+proc createBufferSource(a: AudioContext): AudioBufferSourceNode {.jsimport.}
+proc decodeAudioData(a: AudioContext, ab: JSObj, handler: proc(b: AudioBuffer), onErr: proc(b: JSObj)) {.jsimport.}
+
+proc connect(n1, n2: AudioNode) {.jsimport.}
+
+proc destination(a: AudioContext): AudioNode {.jsimportProp.}
+
+proc buffer(n: AudioBufferSourceNode): AudioBuffer {.jsimportProp.}
+proc loop(n: AudioBufferSourceNode): bool {.jsimportProp.}
+proc `buffer=`(n: AudioBufferSourceNode, b: AudioBuffer) {.jsimportProp.}
+proc `loop=`(n: AudioBufferSourceNode, b: bool) {.jsimportProp.}
+
+proc duration(b: AudioBuffer): cfloat {.jsimportProp.}
+
+proc start(s: AudioBufferSourceNode) {.jsimport.}
+proc stop(s: AudioBufferSourceNode) {.jsimport.}
+
+proc gain(g: GainNode): AudioParam {.jsimportProp.}
+proc value(g: AudioParam): cfloat {.jsimportProp.}
+proc `value=`(g: AudioParam, v: cfloat) {.jsimportProp.}
+
 type Sound* = ref object
-    source: ref RootObj
-    gain: ref RootObj
+    source: AudioBufferSourceNode
+    gain: GainNode
     freshSource: bool
 
-var contextInited = false
+var context: AudioContext
+var mainVolume: GainNode
 
 proc createContext() =
-    {.emit: """
-    window.AudioContext = (
-        window.AudioContext ||
-        window.webkitAudioContext ||
-        null
-    );
+    context = newAudioContext()
 
-    window.__nimsound_context = null;
-    window.__nimsound_gain = null;
-
-    if (AudioContext) {
-        var ctx = new AudioContext();
-        // Create a AudioGainNode to control the main volume.
-        var mainVolume = ctx.createGain();
-        // Connect the main volume node to the context destination.
-        mainVolume.connect(ctx.destination);
-
-        window.__nimsound_context = ctx;
-        window.__nimsound_gain = mainVolume;
-    }
-    else {
-        console.log("Audio is not supported in your browser");
-    }
-    """.}
+    # Create a AudioGainNode to control the main volume.
+    mainVolume = context.createGain()
+    # Connect the main volume node to the context destination.
+    mainVolume.connect(context.destination)
 
 template createContextIfNeeded() =
-    if not contextInited:
+    if context.isNil:
         createContext()
-        contextInited = true
 
-proc initWithArrayBuffer(s: Sound, ab: ref RootObj, handler: proc() = nil) =
+proc initWithArrayBuffer(s: Sound, ab: ArrayBuffer, handler: proc() = nil) =
     createContextIfNeeded()
-
-    var source : ref RootObj
-    var gain : ref RootObj
-    {.emit: """
-    `source` = window.__nimsound_context.createBufferSource();
-    `gain` = window.__nimsound_context.createGain();
-
-    `source`.connect(`gain`);
-    `gain`.connect(window.__nimsound_gain);
-
-    window.__nimsound_context.decodeAudioData(`ab`, function(buffer) {
-        `source`.buffer = buffer;
-        if (`handler` != null) `handler`();
-      },
-
-      function(e) {
-        if (`handler` != null) `handler`();
-        console.log("Error with decoding audio data" + e.err);
-        });
-    """.}
-    s.source = source
-    s.gain = gain
     s.freshSource = true
+    s.source = context.createBufferSource()
+    s.gain = context.createGain()
+    s.source.connect(s.gain)
+    s.gain.connect(mainVolume)
 
-proc newSoundWithArrayBuffer*(ab: ref RootObj): Sound =
+    var onSuccess : proc(b: AudioBuffer)
+    var onError : proc(e: JSObj)
+
+    onSuccess = proc(b: AudioBuffer) =
+        s.source.buffer = b
+        if not handler.isNil: handler()
+        jsUnref(onSuccess)
+        jsUnref(onError)
+
+    onError = proc(e: JSObj) =
+        echo "Error decoding audio data"
+        if not handler.isNil: handler()
+        jsUnref(onSuccess)
+        jsUnref(onError)
+
+    jsRef(onSuccess)
+    jsRef(onError)
+
+    context.decodeAudioData(ab, onSuccess, onError)
+
+proc newSoundWithArrayBuffer*(ab: ArrayBuffer): Sound =
     result.new()
     result.initWithArrayBuffer(ab)
 
-proc newSoundWithArrayBufferAsync*(ab: ref RootObj, handler: proc(s: Sound)) =
+proc newSoundWithArrayBufferAsync*(ab: ArrayBuffer, handler: proc(s: Sound)) =
     let s = Sound.new()
     s.initWithArrayBuffer(ab, proc() =
         handler(s))
@@ -80,52 +99,38 @@ proc newSoundWithURL*(url: string): Sound =
     req.responseType = "arraybuffer"
 
     let snd = result
-    let reqListener = proc(ev: ref RootObj) =
-        var data : ref RootObj
-        {.emit: "`data` = `ev`.target.response;".}
-        snd.initWithArrayBuffer(data)
+    var reqListener : proc()
+    reqListener = proc() =
+        snd.initWithArrayBuffer(cast[ArrayBuffer](req.response))
+        jsUnref(reqListener)
+    jsRef(reqListener)
 
     req.addEventListener("load", reqListener)
     req.send()
 
 proc setLooping*(s: Sound, flag: bool) =
-    let source = s.source
-    {.emit: "`source`.loop = `flag`;".}
+    s.source.loop = flag
 
 proc recreateSource(s: Sound) =
     var source = s.source
-    let gain = s.gain
-
-    {.emit: """
-    var newSource = window.__nimsound_context.createBufferSource();
-    newSource.connect(`gain`);
-    newSource.buffer = `source`.buffer;
-    newSource.loop = `source`.loop;
-    `source` = newSource;
-    """.}
-    s.source = source
+    let newSource = context.createBufferSource()
+    newSource.connect(s.gain)
+    newSource.buffer = s.source.buffer
+    newSource.loop = s.source.loop
+    s.source = newSource
     s.freshSource = true
 
-proc duration*(s: Sound): float =
-    let source = s.source
-    {.emit: "`result` = `source`.buffer.duration;".}
+proc duration*(s: Sound): float = s.source.buffer.duration
 
 proc play*(s: Sound) =
     if not s.freshSource: s.recreateSource()
-    let source = s.source
-    {.emit: "`source`.start();".}
+    s.source.start()
     s.freshSource = false
 
 proc stop*(s: Sound) =
     if not s.freshSource:
-        let source = s.source
-        {.emit: "`source`.stop();".}
+        s.source.stop()
         s.recreateSource()
 
-proc `gain=`*(s: Sound, v: float) =
-    let g = s.gain
-    {.emit: "`g`.gain.value = `v`;".}
-
-proc gain*(s: Sound): float =
-    let g = s.gain
-    {.emit: "`result` = `g`.gain.value;".}
+proc `gain=`*(s: Sound, v: float) = s.gain.gain.value = v
+proc gain*(s: Sound): float = s.gain.gain.value
