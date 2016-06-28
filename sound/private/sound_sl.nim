@@ -1,4 +1,4 @@
-import jnim
+import jnim1 # TODO: Switch to new jnim eventually
 import math
 import times
 
@@ -39,7 +39,7 @@ var gTrash = newSeq[tuple[item: SLObjectItf, time: float]]()
 
 proc initSoundEngineWithActivity*(a: jobject) =
     var am = Activity(a).getApplication().getAssets()
-    let env = jnim.currentEnv
+    let env = jnim1.currentEnv
     {.emit: "`gAssetManager` = AAssetManager_fromJava(`env`, `am`);".}
 
 proc initEngine() =
