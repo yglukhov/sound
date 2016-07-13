@@ -25,6 +25,7 @@ proc buffer(n: AudioBufferSourceNode): AudioBuffer {.jsimportProp.}
 proc loop(n: AudioBufferSourceNode): bool {.jsimportProp.}
 proc `buffer=`(n: AudioBufferSourceNode, b: AudioBuffer) {.jsimportProp.}
 proc `loop=`(n: AudioBufferSourceNode, b: bool) {.jsimportProp.}
+proc `onended=`*(n: AudioBufferSourceNode, p: proc()) {.jsimportProp.}
 
 proc duration(b: AudioBuffer): cfloat {.jsimportProp.}
 
@@ -36,7 +37,7 @@ proc value(g: AudioParam): cfloat {.jsimportProp.}
 proc `value=`(g: AudioParam, v: cfloat) {.jsimportProp.}
 
 type Sound* = ref object
-    source: AudioBufferSourceNode
+    source*: AudioBufferSourceNode
     gain: GainNode
     freshSource: bool
 
