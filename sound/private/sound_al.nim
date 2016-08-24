@@ -7,6 +7,7 @@ type Sound* = ref object
     src: ALuint
     mGain: ALfloat
     mLooping: bool
+    mDuration: float
 
 var contextInited = false
 var alContext : ALCcontext
@@ -83,6 +84,7 @@ proc newSoundWithVorbis(v: Vorbis): Sound =
         # Upload sound data to buffer
         alBufferData(result.buffer, format, buffer, ALsizei(curOffset * 2), freq)
 
+    result.mDuration = (curOffset.ALint / (freq.ALint * i.channels).ALint).float
     dealloc(buffer)
 
 proc newSoundWithFile*(path: string): Sound =
@@ -98,14 +100,7 @@ proc isSourcePlaying(src: ALuint): bool =
     result = state == AL_PLAYING
 
 proc duration*(s: Sound): float =
-    if s.buffer == 0: return 0
-    var sizeInBytes, channels, bits, frequency: ALint
-    alGetBufferi(s.buffer, AL_SIZE, addr sizeInBytes)
-    alGetBufferi(s.buffer, AL_CHANNELS, addr channels)
-    alGetBufferi(s.buffer, AL_BITS, addr bits)
-    alGetBufferi(s.buffer, AL_FREQUENCY, addr frequency)
-    let lengthInSamples = sizeInBytes * 8 / (channels * bits)
-    result = float(lengthInSamples) / float(frequency)
+    return s.mDuration
 
 proc setLooping*(s: Sound, flag: bool) =
     s.mLooping = flag
