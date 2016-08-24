@@ -100,14 +100,7 @@ proc isSourcePlaying(src: ALuint): bool =
     result = state == AL_PLAYING
 
 proc duration*(s: Sound): float =
-    if s.buffer == 0: return s.mDuration
-    var sizeInBytes, channels, bits, frequency: ALint
-    alGetBufferi(s.buffer, AL_SIZE, addr sizeInBytes)
-    alGetBufferi(s.buffer, AL_CHANNELS, addr channels)
-    alGetBufferi(s.buffer, AL_BITS, addr bits)
-    alGetBufferi(s.buffer, AL_FREQUENCY, addr frequency)
-    let lengthInSamples = sizeInBytes * 8 / (channels * bits)
-    result = float(lengthInSamples) / float(frequency)
+    return s.mDuration
 
 proc setLooping*(s: Sound, flag: bool) =
     s.mLooping = flag
