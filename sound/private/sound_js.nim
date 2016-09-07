@@ -68,16 +68,18 @@ proc initWithArrayBuffer(s: Sound, ab: ArrayBuffer, handler: proc() = nil) =
     var onError : proc(e: JSObj)
 
     onSuccess = proc(b: AudioBuffer) =
-        s.source.buffer = b
-        if not handler.isNil: handler()
-        jsUnref(onSuccess)
-        jsUnref(onError)
+        handleJSExceptions:
+            jsUnref(onSuccess)
+            jsUnref(onError)
+            s.source.buffer = b
+            if not handler.isNil: handler()
 
     onError = proc(e: JSObj) =
-        echo "Error decoding audio data"
-        if not handler.isNil: handler()
-        jsUnref(onSuccess)
-        jsUnref(onError)
+        handleJSExceptions:
+            jsUnref(onSuccess)
+            jsUnref(onError)
+            echo "Error decoding audio data"
+            if not handler.isNil: handler()
 
     jsRef(onSuccess)
     jsRef(onError)
@@ -102,8 +104,9 @@ proc newSoundWithURL*(url: string): Sound =
     let snd = result
     var reqListener : proc()
     reqListener = proc() =
-        snd.initWithArrayBuffer(cast[ArrayBuffer](req.response))
-        jsUnref(reqListener)
+        handleJSExceptions:
+            jsUnref(reqListener)
+            snd.initWithArrayBuffer(cast[ArrayBuffer](req.response))
     jsRef(reqListener)
 
     req.addEventListener("load", reqListener)
