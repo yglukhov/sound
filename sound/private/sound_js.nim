@@ -18,6 +18,7 @@ proc createBufferSource(a: AudioContext): AudioBufferSourceNode {.jsimport.}
 proc decodeAudioData(a: AudioContext, ab: JSObj, handler: proc(b: AudioBuffer), onErr: proc(b: JSObj)) {.jsimport.}
 
 proc connect(n1, n2: AudioNode) {.jsimport.}
+proc disconnect(n1: AudioNode) {.jsimport.}
 
 proc destination(a: AudioContext): AudioNode {.jsimportProp.}
 
@@ -121,6 +122,7 @@ proc recreateSource(s: Sound) =
     newSource.connect(s.gain)
     newSource.buffer = s.source.buffer
     newSource.loop = s.source.loop
+    s.source.disconnect()
     s.source = newSource
     s.freshSource = true
 
@@ -128,7 +130,6 @@ proc duration*(s: Sound): float = s.source.buffer.duration
 
 proc play*(s: Sound) =
     if not s.freshSource:
-        if not s.source.isNil: s.source.stop()
         s.recreateSource()
     s.source.start()
     s.freshSource = false
