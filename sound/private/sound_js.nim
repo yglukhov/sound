@@ -127,7 +127,9 @@ proc recreateSource(s: Sound) =
 proc duration*(s: Sound): float = s.source.buffer.duration
 
 proc play*(s: Sound) =
-    if not s.freshSource: s.recreateSource()
+    if not s.freshSource:
+        if not s.source.isNil: s.source.stop()
+        s.recreateSource()
     s.source.start()
     s.freshSource = false
 
