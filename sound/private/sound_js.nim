@@ -1,5 +1,5 @@
 import async_http_request
-
+import logging
 import jsbind
 
 type
@@ -79,7 +79,8 @@ proc initWithArrayBuffer(s: Sound, ab: ArrayBuffer, handler: proc() = nil) =
         handleJSExceptions:
             jsUnref(onSuccess)
             jsUnref(onError)
-            echo "Error decoding audio data"
+            s.source = nil
+            error "Error decoding audio data"
             if not handler.isNil: handler()
 
     jsRef(onSuccess)
@@ -114,7 +115,8 @@ proc newSoundWithURL*(url: string): Sound =
     req.send()
 
 proc setLooping*(s: Sound, flag: bool) =
-    s.source.loop = flag
+    if not s.source.isNil:
+        s.source.loop = flag
 
 proc recreateSource(s: Sound) =
     var source = s.source
@@ -126,16 +128,19 @@ proc recreateSource(s: Sound) =
     s.source = newSource
     s.freshSource = true
 
-proc duration*(s: Sound): float = s.source.buffer.duration
+proc duration*(s: Sound): float =
+    if not s.source.isNil:
+        result = s.source.buffer.duration
 
 proc play*(s: Sound) =
-    if not s.freshSource:
-        s.recreateSource()
-    s.source.start()
-    s.freshSource = false
+    if not s.source.isNil:
+        if not s.freshSource:
+            s.recreateSource()
+        s.source.start()
+        s.freshSource = false
 
 proc stop*(s: Sound) =
-    if not s.freshSource:
+    if not s.source.isNil and not s.freshSource:
         s.source.stop()
         s.recreateSource()
 
