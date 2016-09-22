@@ -1,6 +1,13 @@
 import openal
 import stb_vorbis
 import streams
+proc c_malloc(size: csize): pointer {.
+  importc: "malloc", header: "<stdlib.h>".}
+proc c_free(p: pointer) {.
+  importc: "free", header: "<stdlib.h>".}
+proc c_realloc(p: pointer, newsize: csize): pointer {.
+  importc: "realloc", header: "<stdlib.h>".}
+
 
 type Sound* = ref object
     buffer: ALuint
@@ -66,9 +73,9 @@ proc newSoundWithVorbis(v: Vorbis): Sound =
     while true:
         # Read up to a buffer's worth of decoded sound data
         if buffer.isNil:
-            buffer = cast[ptr uint16](alloc(OGG_BUFFER_SIZE * 2))
+            buffer = cast[ptr uint16](c_malloc(OGG_BUFFER_SIZE * 2))
         else:
-            buffer = cast[ptr uint16](realloc(buffer, (curOffset + OGG_BUFFER_SIZE) * 2))
+            buffer = cast[ptr uint16](c_realloc(buffer, ((curOffset + OGG_BUFFER_SIZE) * 2).csize))
         let dataRead = stb_vorbis_get_samples_short_interleaved(v, i.channels, cast[ptr uint16](cast[uint](buffer) + curOffset * 2), OGG_BUFFER_SIZE) * i.channels
         curOffset += uint(dataRead)
         if dataRead < OGG_BUFFER_SIZE:
@@ -85,7 +92,7 @@ proc newSoundWithVorbis(v: Vorbis): Sound =
         alBufferData(result.buffer, format, buffer, ALsizei(curOffset * 2), freq)
 
     result.mDuration = (curOffset.ALint / (freq.ALint * i.channels).ALint).float
-    dealloc(buffer)
+    c_free(buffer)
 
 proc newSoundWithFile*(path: string): Sound =
     result = newSoundWithVorbis(stb_vorbis_open_filename(path, nil, nil))
