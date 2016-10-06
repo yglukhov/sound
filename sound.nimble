@@ -7,5 +7,5 @@ license       = "MIT"
 # Deps
 requires "nim >= 0.10.0"
 requires "jnim"
-requires "async_http_request"
+requires "https://github.com/yglukhov/async_http_request"
 requires "jsbind"
