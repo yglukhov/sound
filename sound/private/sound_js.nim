@@ -91,7 +91,7 @@ proc initWithArrayBuffer(s: Sound, ab: ArrayBuffer, handler: proc() = nil) =
     context.decodeAudioData(ab, onSuccess, onError)
 
 when defined(emscripten):
-    import emscripten
+    import jsbind.emscripten
     import sets
     var activeCompletionHandlers = initSet[pointer]()
 
