@@ -27,6 +27,7 @@ type Sound* = ref object
     path: string
     mGain: float
     mLooping: bool
+    fd: cint
 
 var engineInited = false
 
@@ -35,7 +36,7 @@ var gEngine : SLEngineItf # = nil
 var gOutputMix : SLObjectItf
 
 const TRASH_TIMEOUT = 0.5
-var gTrash = newSeq[tuple[item: SLObjectItf, time: float]]()
+var gTrash = newSeq[tuple[item: SLObjectItf, fd: cint, time: float]]()
 
 proc initSoundEngineWithActivity*(a: jobject) =
     var am = Activity(a).getApplication().getAssets()
@@ -82,7 +83,7 @@ proc newSoundWithFile*(path: string): Sound =
     result.mGain = 1
 
 type ResourseDescriptor {.exportc.} = object
-    decriptor: int32
+    descriptor: int32
     start: int32
     length: int32
 
@@ -91,9 +92,11 @@ proc loadResourceDescriptor(path: cstring): ResourseDescriptor =
     {.emit: """
     AAsset* asset = AAssetManager_open(`gAssetManager`, `path`, AASSET_MODE_UNKNOWN);
     if (asset) {
-        `loaded` = 1;
-        `result`.decriptor = AAsset_openFileDescriptor(asset, &`result`.start, &`result`.length);
+        `result`.descriptor = AAsset_openFileDescriptor(asset, &`result`.start, &`result`.length);
         AAsset_close(asset);
+        if (`result`.descriptor >= 0) {
+            `loaded` = 1;
+        }
     }
     """.}
     if not loaded:
@@ -172,9 +175,9 @@ proc collectTrash()=
     let curTime = epochTime()
     var i = 0
     while i < gTrash.len:
-        var (item, time) = gTrash[i]
+        var (item, fd, time) = gTrash[i]
         if abs(time - curTime) > TRASH_TIMEOUT:
-            {.emit: "(*`item`)->Destroy(`item`);".}
+            {.emit: "(*`item`)->Destroy(`item`); close(`fd`);".}
             gTrash.delete(i)
         else:
             inc i
@@ -184,9 +187,9 @@ proc collectTrash()=
 # For more information:
 # https://groups.google.com/forum/#!msg/android-ndk/zANdS2n2cQI/AT6q1F3nNGIJ
 
-proc destroy(pl: SLObjectItf not nil) =
+proc destroy(pl: SLObjectItf not nil, fd: cint) =
     collectTrash()
-    gTrash.add( (item: pl, time: epochTime()) )
+    gTrash.add( (item: pl, fd: fd, time: epochTime()) )
 
 proc stop*(s: Sound) =
     let pl = s.player
@@ -196,7 +199,7 @@ proc stop*(s: Sound) =
             if s == activeSounds[i]:
                 activeSounds.del(i)
                 break
-        pl.destroy()
+        pl.destroy(s.fd)
         s.player = nil
 
 proc collectInactiveSounds() =
@@ -208,7 +211,7 @@ proc collectInactiveSounds() =
         # through one loop and continue playing, so we cannot dispose looping
         # players here. Instead they may be disposed in stop().
         if not pl.isNil and not s.mLooping and pl.playState != SL_PLAYSTATE_PLAYING:
-            pl.destroy()
+            pl.destroy(s.fd)
             s.player = nil
             activeSounds.del(i)
             break
@@ -221,14 +224,16 @@ proc play*(s: Sound) =
     if pl.isNil:
         collectInactiveSounds()
     else:
-        pl.destroy()
+        pl.destroy(s.fd)
         s.player = nil
         pl = nil
+
     let rd = loadResourceDescriptor(s.path)
+    s.fd = rd.descriptor
     {.emit: """
     SLDataLocator_AndroidFD locatorIn = {
         SL_DATALOCATOR_ANDROIDFD,
-        `rd`.decriptor,
+        `rd`.descriptor,
         `rd`.start,
         `rd`.length
     };
