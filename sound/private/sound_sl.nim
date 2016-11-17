@@ -268,15 +268,26 @@ proc duration*(s: Sound): float =
     let pl = s.player
     if not pl.isNil:
         var msDuration : uint32 = 0xFFFFFFFFu32
+        var res:cint = 0
         {.emit: """
         SLPlayItf player;
-        int res = (*`pl`)->GetInterface(`pl`, SL_IID_PLAY, &player);
-        if (res == SL_RESULT_SUCCESS) {
-            while (`msDuration` == 0xFFFFFFFF && res == SL_RESULT_SUCCESS){
-                res = (*player)->GetDuration(player, &`msDuration`);
-            }
-        }
+        `res` = (*`pl`)->GetInterface(`pl`, SL_IID_PLAY, &player);
         """.}
+
+        if res == 0:
+            var st = 0.0
+            while msDuration == 0xFFFFFFFFu32 and res == 0:
+                {.emit: """
+                `res` = (*player)->GetDuration(player, &`msDuration`);
+                """.}
+
+                if res == 0 and msDuration == 0xFFFFFFFFu32:
+                    if st == 0.0:
+                        st = epochTime()
+                    elif epochTime() - st > 0.2:
+                        msDuration = 1000
+
+                        break
         result = float(msDuration) * 0.001
 
 #[
