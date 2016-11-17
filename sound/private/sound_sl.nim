@@ -81,6 +81,7 @@ proc newSoundWithFile*(path: string): Sound =
     result.path = path
     result.player = nil
     result.mGain = 1
+    result.fd = -1
 
 type ResourseDescriptor {.exportc.} = object
     descriptor: int32
@@ -177,7 +178,7 @@ proc collectTrash()=
     while i < gTrash.len:
         var (item, fd, time) = gTrash[i]
         if abs(time - curTime) > TRASH_TIMEOUT:
-            {.emit: "(*`item`)->Destroy(`item`); close(`fd`);".}
+            {.emit: "(*`item`)->Destroy(`item`);if (`fd` >= 0){close(`fd`);}".}
             gTrash.delete(i)
         else:
             inc i
