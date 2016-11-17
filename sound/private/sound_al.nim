@@ -101,6 +101,31 @@ proc newSoundWithStream*(s: Stream): Sound =
     var data = s.readAll()
     result = newSoundWithVorbis(stb_vorbis_open_memory(addr data[0], cint(data.len), nil, nil))
 
+proc newSoundWithPCMData*(data: openarray[byte], channels, bitsPerSample, samplesPerSecond: int): Sound =
+    ## This function is only availbale for openal for now. Sorry.
+    createContext()
+    result.new(finalizeSound)
+    if not alContext.isNil:
+        result.mGain = 1
+
+        var format : ALenum
+        if channels == 1:
+            if bitsPerSample == 16:
+                format = AL_FORMAT_MONO16
+            elif bitsPerSample == 8:
+                format = AL_FORMAT_MONO8
+        else:
+            if bitsPerSample == 16:
+                format = AL_FORMAT_STEREO16
+            elif bitsPerSample == 8:
+                format = AL_FORMAT_STEREO8
+
+        let freq = ALsizei(samplesPerSecond)
+
+        alGenBuffers(1, addr result.buffer)
+        # Upload sound data to buffer
+        alBufferData(result.buffer, format, unsafeAddr data[0], ALsizei(data.len), freq)
+
 proc isSourcePlaying(src: ALuint): bool =
     var state: ALenum
     alGetSourcei(src, AL_SOURCE_STATE, addr state)

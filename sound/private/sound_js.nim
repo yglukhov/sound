@@ -1,5 +1,5 @@
 import async_http_request
-
+import logging
 import jsbind
 
 type
@@ -41,6 +41,8 @@ type Sound* = ref object
     source*: AudioBufferSourceNode
     gain: GainNode
     freshSource: bool
+    when defined(emscripten):
+        completionHandler: proc()
 
 var context: AudioContext
 var mainVolume: GainNode
@@ -79,7 +81,8 @@ proc initWithArrayBuffer(s: Sound, ab: ArrayBuffer, handler: proc() = nil) =
         handleJSExceptions:
             jsUnref(onSuccess)
             jsUnref(onError)
-            echo "Error decoding audio data"
+            s.source = nil
+            error "Error decoding audio data"
             if not handler.isNil: handler()
 
     jsRef(onSuccess)
@@ -87,17 +90,40 @@ proc initWithArrayBuffer(s: Sound, ab: ArrayBuffer, handler: proc() = nil) =
 
     context.decodeAudioData(ab, onSuccess, onError)
 
+when defined(emscripten):
+    import jsbind.emscripten
+    import sets
+    var activeCompletionHandlers = initSet[pointer]()
+
+    proc nimSoundCompletionHandler(s: pointer) {.EMSCRIPTEN_KEEPALIVE.} =
+        if s in activeCompletionHandlers:
+            let snd = cast[Sound](s)
+            snd.completionHandler()
+
+    proc finalizeSound(s: Sound) =
+        activeCompletionHandlers.excl(cast[pointer](s))
+
+    template newSound(): Sound =
+        var s: Sound
+        s.new(finalizeSound)
+        s
+else:
+    template newSound(): Sound =
+        var s: Sound
+        s.new()
+        s
+
 proc newSoundWithArrayBuffer*(ab: ArrayBuffer): Sound =
-    result.new()
+    result = newSound()
     result.initWithArrayBuffer(ab)
 
 proc newSoundWithArrayBufferAsync*(ab: ArrayBuffer, handler: proc(s: Sound)) =
-    let s = Sound.new()
+    let s = newSound()
     s.initWithArrayBuffer(ab, proc() =
         handler(s))
 
 proc newSoundWithURL*(url: string): Sound =
-    result.new()
+    result = newSound()
     let req = newXMLHTTPRequest()
     req.open("GET", url)
     req.responseType = "arraybuffer"
@@ -114,7 +140,8 @@ proc newSoundWithURL*(url: string): Sound =
     req.send()
 
 proc setLooping*(s: Sound, flag: bool) =
-    s.source.loop = flag
+    if not s.source.isNil:
+        s.source.loop = flag
 
 proc recreateSource(s: Sound) =
     var source = s.source
@@ -126,18 +153,42 @@ proc recreateSource(s: Sound) =
     s.source = newSource
     s.freshSource = true
 
-proc duration*(s: Sound): float = s.source.buffer.duration
+proc duration*(s: Sound): float =
+    if not s.source.isNil:
+        result = s.source.buffer.duration
 
 proc play*(s: Sound) =
-    if not s.freshSource:
-        s.recreateSource()
-    s.source.start()
-    s.freshSource = false
+    if not s.source.isNil:
+        if not s.freshSource:
+            s.recreateSource()
+        s.source.start()
+        s.freshSource = false
 
 proc stop*(s: Sound) =
-    if not s.freshSource:
+    if not s.source.isNil and not s.freshSource:
         s.source.stop()
         s.recreateSource()
 
 proc `gain=`*(s: Sound, v: float) = s.gain.gain.value = v
 proc gain*(s: Sound): float = s.gain.gain.value
+
+proc onComplete*(s: Sound, h: proc()) =
+    ## This function is only availbale for js and emscripten for now. Sorry.
+    if not s.source.isNil:
+        when defined(js):
+            s.source.onended = h
+        else:
+            s.completionHandler = h
+            if h.isNil:
+                discard EM_ASM_INT("""
+                _nimem_o[$0].onended = null;
+                """, s.source.p)
+                activeCompletionHandlers.excl(cast[pointer](s))
+            else:
+                activeCompletionHandlers.incl(cast[pointer](s))
+                discard EM_ASM_INT("""
+                var src = _nimem_o[$1];
+                src.onended = function() {
+                    _nimSoundCompletionHandler($0);
+                }
+                """, cast[pointer](s), s.source.p)
