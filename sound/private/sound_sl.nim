@@ -1,6 +1,7 @@
 import jnim1 # TODO: Switch to new jnim eventually
 import math
 import times
+import logging
 
 {.emit: """/*INCLUDESECTION*/
 #include <SLES/OpenSLES_Android.h>
@@ -172,24 +173,63 @@ proc setPlayState(pl: SLObjectItf not nil, state: uint32) =
     (*player)->SetPlayState(player, `state`);
     """.}
 
+proc getPlayState(pl: SLObjectItf): uint32 =
+    {.emit: """
+    SLPlayItf player;
+    int res = (*`pl`)->GetInterface(`pl`, SL_IID_PLAY, &player);
+    (*player)->GetPlayState(player, &`result`);
+    """.}
+
+# Destroying OpenSL players may cause dead lock.
+# It's a system issue :(
+# For more information:
+# https://groups.google.com/forum/#!msg/android-ndk/zANdS2n2cQI/AT6q1F3nNGIJ
+# The best workaround we could find for now is deleting players in background
+# threads, and if they hang just ignore it. Timeouts and and waiting for
+# stopped-state still do not guarantee success, but somehow may reduce
+# reproducibility, so we do it anyway.
+
+var deletionThreads = 0
+
+{.push stackTrace: off.}
+proc deletionThread(p: pointer) {.cdecl.} =
+    atomicInc deletionThreads
+    {.emit: """
+    SLObjectItf item = (SLObjectItf)`p`;
+    (*item)->Destroy(item);
+    """.}
+    atomicDec deletionThreads
+{.pop.}
+
 proc collectTrash()=
+    let dt = deletionThreads
+    if dt > 0:
+        warn "OpenSL PlayerDestroy threads: ", dt
+
     let curTime = epochTime()
     var i = 0
     while i < gTrash.len:
         var (item, fd, time) = gTrash[i]
         if abs(time - curTime) > TRASH_TIMEOUT:
-            {.emit: "(*`item`)->Destroy(`item`);if (`fd` >= 0){close(`fd`);}".}
-            gTrash.delete(i)
+            if getPlayState(item) == SL_PLAYSTATE_STOPPED:
+                {.emit: """
+                if (`fd` >= 0) {
+                    close(`fd`);
+                }
+                pthread_t t;
+                pthread_create(&t, NULL, `deletionThread`, `item`);
+                """.}
+                gTrash.del(i)
+            else:
+                if not item.isNil:
+                    setPlayState(item, SL_PLAYSTATE_STOPPED)
+                inc i
         else:
             inc i
 
-# If destroy openSL object immediately,it may cause dead lock.
-# It's a system issue ;(
-# For more information:
-# https://groups.google.com/forum/#!msg/android-ndk/zANdS2n2cQI/AT6q1F3nNGIJ
-
 proc destroy(pl: SLObjectItf not nil, fd: cint) =
     collectTrash()
+    setPlayState(pl, SL_PLAYSTATE_STOPPED)
     gTrash.add( (item: pl, fd: fd, time: epochTime()) )
 
 proc stop*(s: Sound) =
