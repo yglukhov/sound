@@ -1,4 +1,4 @@
-import jnim1 # TODO: Switch to new jnim eventually
+import jnim
 import math
 import times
 import logging
@@ -8,13 +8,13 @@ import logging
 #include <android/asset_manager_jni.h>
 """.}
 
-jnimport:
-    import android.app.Activity
-    import android.app.Application
-    import android.content.res.AssetManager
+jclassDef android.content.res.AssetManager of JVMObject
 
-    proc getApplication(a: Activity): Application
-    proc getAssets(a: Application): AssetManager
+jclass android.app.Application of JVMObject:
+    proc getAssets: AssetManager
+
+jclass android.app.Activity of JVMObject:
+    proc getApplication: Application
 
 type
     AAssetManager {.importc, incompleteStruct.} = object
@@ -40,8 +40,8 @@ const TRASH_TIMEOUT = 0.5
 var gTrash = newSeq[tuple[item: SLObjectItf, fd: cint, time: float]]()
 
 proc initSoundEngineWithActivity*(a: jobject) =
-    var am = Activity(a).getApplication().getAssets()
-    let env = jnim1.currentEnv
+    var am = Activity.fromJObject(a).getApplication().getAssets()
+    let env = jnim.theEnv
     {.emit: "`gAssetManager` = AAssetManager_fromJava(`env`, `am`);".}
 
 proc initEngine() =
