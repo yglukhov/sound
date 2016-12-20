@@ -40,7 +40,7 @@ const TRASH_TIMEOUT = 0.5
 var gTrash = newSeq[tuple[item: SLObjectItf, fd: cint, time: float]]()
 
 proc initSoundEngineWithActivity*(a: jobject) =
-    var am = Activity.fromJObject(a).getApplication().getAssets()
+    var am = Activity.fromJObject(a).getApplication().getAssets().get()
     let env = jnim.theEnv
     {.emit: "`gAssetManager` = AAssetManager_fromJava(`env`, `am`);".}
 
