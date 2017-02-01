@@ -20,6 +20,9 @@ proc stb_vorbis_stream_length_in_samples*(f: Vorbis): cuint {.importc, noconv.}
 proc stb_vorbis_get_samples_short_interleaved*(f: Vorbis, channels: cint, buffer: ptr uint16, num_shorts: cint): cint {.importc, noconv.}
 proc stb_vorbis_close*(f: Vorbis) {.importc, noconv.}
 
+when defined(linux) and not defined(android):
+    {.passL: "-lm".}
+
 {.emit: """
 // Ogg Vorbis audio decoder - v1.09 - public domain
 // http://nothings.org/stb_vorbis/
