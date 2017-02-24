@@ -49,11 +49,11 @@ var mainVolume: GainNode
 
 proc createContext() =
     context = newAudioContext()
-
-    # Create a AudioGainNode to control the main volume.
-    mainVolume = context.createGain()
-    # Connect the main volume node to the context destination.
-    mainVolume.connect(context.destination)
+    if not context.isNil:
+        # Create a AudioGainNode to control the main volume.
+        mainVolume = context.createGain()
+        # Connect the main volume node to the context destination.
+        mainVolume.connect(context.destination)
 
 template createContextIfNeeded() =
     if context.isNil:
@@ -62,33 +62,34 @@ template createContextIfNeeded() =
 proc initWithArrayBuffer(s: Sound, ab: ArrayBuffer, handler: proc() = nil) =
     createContextIfNeeded()
     s.freshSource = true
-    s.source = context.createBufferSource()
-    s.gain = context.createGain()
-    s.source.connect(s.gain)
-    s.gain.connect(mainVolume)
+    if not context.isNil:
+        s.source = context.createBufferSource()
+        s.gain = context.createGain()
+        s.source.connect(s.gain)
+        s.gain.connect(mainVolume)
 
-    var onSuccess : proc(b: AudioBuffer)
-    var onError : proc(e: JSObj)
+        var onSuccess : proc(b: AudioBuffer)
+        var onError : proc(e: JSObj)
 
-    onSuccess = proc(b: AudioBuffer) =
-        handleJSExceptions:
-            jsUnref(onSuccess)
-            jsUnref(onError)
-            s.source.buffer = b
-            if not handler.isNil: handler()
+        onSuccess = proc(b: AudioBuffer) =
+            handleJSExceptions:
+                jsUnref(onSuccess)
+                jsUnref(onError)
+                s.source.buffer = b
+                if not handler.isNil: handler()
 
-    onError = proc(e: JSObj) =
-        handleJSExceptions:
-            jsUnref(onSuccess)
-            jsUnref(onError)
-            s.source = nil
-            error "Error decoding audio data"
-            if not handler.isNil: handler()
+        onError = proc(e: JSObj) =
+            handleJSExceptions:
+                jsUnref(onSuccess)
+                jsUnref(onError)
+                s.source = nil
+                error "Error decoding audio data"
+                if not handler.isNil: handler()
 
-    jsRef(onSuccess)
-    jsRef(onError)
+        jsRef(onSuccess)
+        jsRef(onError)
 
-    context.decodeAudioData(ab, onSuccess, onError)
+        context.decodeAudioData(ab, onSuccess, onError)
 
 when defined(emscripten):
     import jsbind.emscripten
@@ -119,8 +120,8 @@ proc newSoundWithArrayBuffer*(ab: ArrayBuffer): Sound =
 
 proc newSoundWithArrayBufferAsync*(ab: ArrayBuffer, handler: proc(s: Sound)) =
     let s = newSound()
-    s.initWithArrayBuffer(ab, proc() =
-        handler(s))
+    s.initWithArrayBuffer(ab) do():
+        handler(s)
 
 proc newSoundWithURL*(url: string): Sound =
     result = newSound()
@@ -169,8 +170,13 @@ proc stop*(s: Sound) =
         s.source.stop()
         s.recreateSource()
 
-proc `gain=`*(s: Sound, v: float) = s.gain.gain.value = v
-proc gain*(s: Sound): float = s.gain.gain.value
+proc `gain=`*(s: Sound, v: float) =
+    let g = s.gain
+    if not g.isNil: g.gain.value = v
+
+proc gain*(s: Sound): float =
+    let g = s.gain
+    if not g.isNil: result = g.gain.value
 
 proc onComplete*(s: Sound, h: proc()) =
     ## This function is only availbale for js and emscripten for now. Sorry.
