@@ -19,7 +19,7 @@ type Sound* = ref object
 var contextInited = false
 var alContext : ALCcontext
 
-var activeSounds = newSeq[Sound]()
+var activeSounds: seq[Sound]
 
 proc createContext() =
     if contextInited: return
@@ -126,7 +126,7 @@ proc newSoundWithPCMData*(data: openarray[byte], channels, bitsPerSample, sample
         # Upload sound data to buffer
         alBufferData(result.buffer, format, unsafeAddr data[0], ALsizei(data.len), freq)
 
-proc isSourcePlaying(src: ALuint): bool =
+proc isSourcePlaying(src: ALuint): bool {.inline.} =
     var state: ALenum
     alGetSourcei(src, AL_SOURCE_STATE, addr state)
     result = state == AL_PLAYING
@@ -162,6 +162,7 @@ proc play*(s: Sound) =
             alSourcef(s.src, AL_GAIN, s.mGain)
             alSourcei(s.src, AL_LOOPING, ALint(s.mLooping))
             alSourcePlay(s.src)
+            if activeSounds.isNil: activeSounds = @[]
             activeSounds.add(s)
         else:
             alSourceStop(s.src)
