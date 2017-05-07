@@ -1,12 +1,7 @@
 import jnim
-import math
-import times
-import logging
+import math, times, logging, posix
 import opensl
-
-{.emit: """/*INCLUDESECTION*/
-#include <android/asset_manager_jni.h>
-""".}
+import android.ndk.aasset_manager
 
 jclassDef android.content.res.AssetManager of JVMObject
 
@@ -15,10 +10,6 @@ jclass android.app.Application of JVMObject:
 
 jclass android.app.Activity of JVMObject:
     proc getApplication: Application
-
-type
-    AAssetManager {.importc, incompleteStruct.} = object
-    AssetManagerPtr = ptr AAssetManager
 
 type Sound* = ref object
     player: SLObjectItf
@@ -29,7 +20,7 @@ type Sound* = ref object
 
 var engineInited = false
 
-var gAssetManager : AssetManagerPtr = nil
+var gAssetManager : AAssetManager
 var gEngine : SLEngineItf # = nil
 var gOutputMix : SLObjectItf
 
@@ -38,8 +29,7 @@ var gTrash = newSeq[tuple[item: SLObjectItf, fd: cint, time: float]]()
 
 proc initSoundEngineWithActivity*(a: jobject) =
     var am = Activity.fromJObject(a).getApplication().getAssets().get()
-    let env = jnim.theEnv
-    {.emit: "`gAssetManager` = AAssetManager_fromJava(`env`, `am`);".}
+    gAssetManager = AAssetManager_fromJava(am)
 
 proc initEngine() =
     if engineInited: return
@@ -72,16 +62,12 @@ type ResourseDescriptor {.exportc.} = object
 
 proc loadResourceDescriptor(path: cstring): ResourseDescriptor =
     var loaded = false
-    {.emit: """
-    AAsset* asset = AAssetManager_open(`gAssetManager`, `path`, AASSET_MODE_UNKNOWN);
-    if (asset) {
-        `result`.descriptor = AAsset_openFileDescriptor(asset, &`result`.start, &`result`.length);
-        AAsset_close(asset);
-        if (`result`.descriptor >= 0) {
-            `loaded` = 1;
-        }
-    }
-    """.}
+    let asset = gAssetManager.open(path, AASSET_MODE_UNKNOWN)
+    if not asset.isNil:
+        result.descriptor = asset.openFileDescriptor(addr result.start, addr result.length)
+        asset.close()
+        if result.descriptor >= 0:
+            loaded = true
     if not loaded:
         raise newException(Exception, "File " & $path & " could not be loaded")
 
@@ -140,14 +126,14 @@ proc getPlayState(pl: SLObjectItf): SLPlayState =
 var deletionThreads = 0
 
 {.push stackTrace: off.}
-proc deletionThread(p: pointer) {.cdecl.} =
+proc deletionThread(p: pointer): pointer {.noconv.} =
     atomicInc deletionThreads
     let item = cast[SLObjectItf](p)
     item.destroy()
-    atomicDec deletionThreads
+    discard atomicDec deletionThreads
 {.pop.}
 
-proc collectTrash()=
+proc collectTrash() {.inline.} =
     let dt = deletionThreads
     if dt > 0:
         warn "OpenSL PlayerDestroy threads: ", dt
@@ -158,13 +144,10 @@ proc collectTrash()=
         var (item, fd, time) = gTrash[i]
         if abs(time - curTime) > TRASH_TIMEOUT:
             if getPlayState(item) == SL_PLAYSTATE_STOPPED:
-                {.emit: """
-                if (`fd` >= 0) {
-                    close(`fd`);
-                }
-                pthread_t t;
-                pthread_create(&t, NULL, `deletionThread`, `item`);
-                """.}
+                if fd >= 0:
+                    discard close(fd)
+                var t: Pthread
+                discard pthread_create(addr t, nil, deletionThread, item)
                 gTrash.del(i)
             else:
                 if not item.isNil:
@@ -189,7 +172,7 @@ proc stop*(s: Sound) =
         pl.destroy(s.fd)
         s.player = nil
 
-proc collectInactiveSounds() =
+proc collectInactiveSounds() {.inline.} =
     for i in 0 ..< activeSounds.len:
         let s = activeSounds[i]
         let pl = s.player
@@ -287,4 +270,4 @@ proc `gain=`*(s: Sound, v: float) =
     if not pl.isNil:
         pl.setGain(v)
 
-proc gain*(s: Sound): float = s.mGain
+proc gain*(s: Sound): float {.inline.} = s.mGain
