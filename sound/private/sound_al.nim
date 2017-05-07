@@ -1,6 +1,7 @@
 import openal
 import stb_vorbis
-import streams
+import streams, logging
+
 proc c_malloc(size: csize): pointer {.
   importc: "malloc", header: "<stdlib.h>".}
 proc c_free(p: pointer) {.
@@ -30,11 +31,11 @@ proc createContext() =
 
     let device = alcOpenDevice(nil)
     if device.isNil:
-        echo "Could not open device"
+        warn "Could not open audio device"
 
     alContext = alcCreateContext(device, nil)
     if alContext.isNil:
-        echo "ERROR: Could not create audio context"
+        error "Could not create audio context"
     else:
         discard alcMakeContextCurrent(alContext)
 
