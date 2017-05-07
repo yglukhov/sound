@@ -47,20 +47,45 @@ proc finalizeSound(s: Sound) =
     if s.src != 0: alDeleteSources(1, addr s.src)
     if s.buffer != 0: alDeleteBuffers(1, addr s.buffer)
 
+proc newSoundWithPCMData*(data: pointer, dataLength, channels, bitsPerSample, samplesPerSecond: int): Sound =
+    ## This function is only availbale for openal for now. Sorry.
+    createContext()
+    result.new(finalizeSound)
+    result.mGain = 1
+
+    var format : ALenum
+    if channels == 1:
+        if bitsPerSample == 16:
+            format = AL_FORMAT_MONO16
+        elif bitsPerSample == 8:
+            format = AL_FORMAT_MONO8
+    else:
+        if bitsPerSample == 16:
+            format = AL_FORMAT_STEREO16
+        elif bitsPerSample == 8:
+            format = AL_FORMAT_STEREO8
+
+    let freq = ALsizei(samplesPerSecond)
+
+    if not alContext.isNil:
+        alGenBuffers(1, addr result.buffer)
+        # Upload sound data to buffer
+        alBufferData(result.buffer, format, data, ALsizei(dataLength), freq)
+
+    let bytesPerSample = bitsPerSample div 8
+    let samplesInChannel = dataLength div bytesPerSample
+    result.mDuration = (samplesInChannel.ALint / (freq.ALint * channels).ALint).float
+
+proc newSoundWithPCMData*(data: openarray[byte], channels, bitsPerSample, samplesPerSecond: int): Sound {.inline.} =
+    ## This function is only availbale for openal for now. Sorry.
+    newSoundWithPCMData(unsafeAddr data[0], data.len, channels, bitsPerSample, samplesPerSecond)
+
 proc newSoundWithVorbis(v: Vorbis): Sound =
     ## v is consumed here.
-    createContext()
 
     if v.isNil: return
     let i = stb_vorbis_get_info(v)
-
-    var format : ALenum
-    if i.channels == 1:
-        format = AL_FORMAT_MONO16
-    else:
-        format = AL_FORMAT_STEREO16
-
-    let freq = ALsizei(i.sample_rate)
+    const bytesPerSample = 2
 
     var buffer : ptr uint16
     #var buffer = newSeq[uint16]() # The sound buffer data from file
@@ -69,29 +94,20 @@ proc newSoundWithVorbis(v: Vorbis): Sound =
 
     const OGG_BUFFER_SIZE = 32768
 
-    var curOffset : uint
+    var curOffset: uint
     while true:
         # Read up to a buffer's worth of decoded sound data
         if buffer.isNil:
-            buffer = cast[ptr uint16](c_malloc(OGG_BUFFER_SIZE * 2))
+            buffer = cast[ptr uint16](c_malloc(OGG_BUFFER_SIZE * bytesPerSample))
         else:
-            buffer = cast[ptr uint16](c_realloc(buffer, ((curOffset + OGG_BUFFER_SIZE) * 2).csize))
-        let dataRead = stb_vorbis_get_samples_short_interleaved(v, i.channels, cast[ptr uint16](cast[uint](buffer) + curOffset * 2), OGG_BUFFER_SIZE) * i.channels
+            buffer = cast[ptr uint16](c_realloc(buffer, ((curOffset + OGG_BUFFER_SIZE) * bytesPerSample).csize))
+        let dataRead = stb_vorbis_get_samples_short_interleaved(v, i.channels, cast[ptr uint16](cast[uint](buffer) + curOffset * bytesPerSample), OGG_BUFFER_SIZE) * i.channels
         curOffset += uint(dataRead)
         if dataRead < OGG_BUFFER_SIZE:
             break
 
     stb_vorbis_close(v)
-
-    result.new(finalizeSound)
-    result.mGain = 1
-
-    if not alContext.isNil:
-        alGenBuffers(1, addr result.buffer)
-        # Upload sound data to buffer
-        alBufferData(result.buffer, format, buffer, ALsizei(curOffset * 2), freq)
-
-    result.mDuration = (curOffset.ALint / (freq.ALint * i.channels).ALint).float
+    result = newSoundWithPCMData(buffer, int(curOffset * bytesPerSample), i.channels, bytesPerSample * 8, int(i.sample_rate))
     c_free(buffer)
 
 proc newSoundWithFile*(path: string): Sound =
@@ -101,45 +117,19 @@ proc newSoundWithStream*(s: Stream): Sound =
     var data = s.readAll()
     result = newSoundWithVorbis(stb_vorbis_open_memory(addr data[0], cint(data.len), nil, nil))
 
-proc newSoundWithPCMData*(data: openarray[byte], channels, bitsPerSample, samplesPerSecond: int): Sound =
-    ## This function is only availbale for openal for now. Sorry.
-    createContext()
-    result.new(finalizeSound)
-    if not alContext.isNil:
-        result.mGain = 1
-
-        var format : ALenum
-        if channels == 1:
-            if bitsPerSample == 16:
-                format = AL_FORMAT_MONO16
-            elif bitsPerSample == 8:
-                format = AL_FORMAT_MONO8
-        else:
-            if bitsPerSample == 16:
-                format = AL_FORMAT_STEREO16
-            elif bitsPerSample == 8:
-                format = AL_FORMAT_STEREO8
-
-        let freq = ALsizei(samplesPerSecond)
-
-        alGenBuffers(1, addr result.buffer)
-        # Upload sound data to buffer
-        alBufferData(result.buffer, format, unsafeAddr data[0], ALsizei(data.len), freq)
-
 proc isSourcePlaying(src: ALuint): bool {.inline.} =
     var state: ALenum
     alGetSourcei(src, AL_SOURCE_STATE, addr state)
     result = state == AL_PLAYING
 
-proc duration*(s: Sound): float =
-    return s.mDuration
+proc duration*(s: Sound): float {.inline.} = s.mDuration
 
 proc setLooping*(s: Sound, flag: bool) =
     s.mLooping = flag
     if s.src != 0:
         alSourcei(s.src, AL_LOOPING, ALint(flag))
 
-proc reclaimInactiveSource(): ALuint =
+proc reclaimInactiveSource(): ALuint {.inline.} =
     for i in 0 ..< activeSounds.len:
         let src = activeSounds[i].src
         if not src.isSourcePlaying:
@@ -173,4 +163,4 @@ proc `gain=`*(s: Sound, v: float) =
     if s.src != 0:
         alSourcef(s.src, AL_GAIN, v)
 
-proc gain*(s: Sound): float = s.mGain
+proc gain*(s: Sound): float {.inline.} = s.mGain
