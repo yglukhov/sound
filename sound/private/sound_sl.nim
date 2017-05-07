@@ -2,9 +2,9 @@ import jnim
 import math
 import times
 import logging
+import opensl
 
 {.emit: """/*INCLUDESECTION*/
-#include <SLES/OpenSLES_Android.h>
 #include <android/asset_manager_jni.h>
 """.}
 
@@ -19,9 +19,6 @@ jclass android.app.Activity of JVMObject:
 type
     AAssetManager {.importc, incompleteStruct.} = object
     AssetManagerPtr = ptr AAssetManager
-    SLObjectItfImpl {.importc: "struct SLObjectItf_", header: "<SLES/OpenSLES.h>", incompleteStruct.} = object
-    SLObjectItf {.importc: "SLObjectItf", header: "<SLES/OpenSLES.h>", incompleteStruct.} = ptr ptr SLObjectItfImpl
-    SLEngineItf {.importc, header: "<SLES/OpenSLES.h>", incompleteStruct.} = object
 
 type Sound* = ref object
     player: SLObjectItf
@@ -49,31 +46,15 @@ proc initEngine() =
     if gAssetManager.isNil:
         raise newException(Exception, "Sound engine on Android should be initialized by initSoundEngineWithActivity.")
     engineInited = true
-    {.emit:"""
-    SLObjectItf engine;
-    const SLInterfaceID pIDs[1] = {SL_IID_ENGINE};
-    const SLboolean pIDsRequired[1]  = {SL_BOOLEAN_TRUE};
-    SLresult result = slCreateEngine(&engine, 0, NULL, 1, pIDs, pIDsRequired);
-
-    if(result != SL_RESULT_SUCCESS){
-        //LOGE("Error after slCreateEngine");
-        return;
-    }
-
-    result = (*engine)->Realize(engine, SL_BOOLEAN_FALSE);
-
-    if(result != SL_RESULT_SUCCESS){
-        //LOGE("Error after Realize engine");
-        return;
-    }
-
-    result = (*engine)->GetInterface(engine, SL_IID_ENGINE, &`gEngine`);
-
-    const SLInterfaceID pOutputMixIDs[] = {};
-    const SLboolean pOutputMixRequired[] = {};
-    result = (*`gEngine`)->CreateOutputMix(`gEngine`, &`gOutputMix`, 0, pOutputMixIDs, pOutputMixRequired);
-    result = (*`gOutputMix`)->Realize(`gOutputMix`, SL_BOOLEAN_FALSE);
-    """.}
+    var engine: SLObjectItf
+    var res = slCreateEngine(engine, [], [SL_IID_ENGINE], [SL_TRUE])
+    if res != SL_RESULT_SUCCESS: return
+    assert(not engine.isNil)
+    res = engine.realize()
+    if res != SL_RESULT_SUCCESS: return
+    res = engine.getInterface(gEngine)
+    res = gEngine.createOutputMix(gOutputMix, [], [])
+    res = gOutputMix.realize()
 
 proc newSoundWithFile*(path: string): Sound =
     ## Play sound from inside APK file
@@ -109,22 +90,16 @@ proc gainToAttenuation(gain: float): float {.inline.} =
 
 proc setGain(pl: SLObjectItf not nil, v: float) =
     let a = gainToAttenuation(v)
-    {.emit: """
-    SLVolumeItf volume;
-    int res = (*`pl`)->GetInterface(`pl`, SL_IID_VOLUME, &volume);
-    if (res == SL_RESULT_SUCCESS) {
-        (*volume)->SetVolumeLevel(volume, `a` * 100.0);
-    }
-    """.}
+    var volume: SLVolumeItf
+    let res = pl.getInterface(volume)
+    if res == SL_RESULT_SUCCESS:
+        discard volume.setVolumeLevel(SLmillibel(a * 100))
 
 proc setLooping(pl: SLObjectItf not nil, flag: bool) =
-    {.emit: """
-    SLSeekItf seek;
-    SLresult res = (*`pl`)->GetInterface(`pl`, SL_IID_SEEK, &seek);
-    if (res == SL_RESULT_SUCCESS) {
-        (*seek)->SetLoop(seek, `flag`, 0, SL_TIME_UNKNOWN);
-    }
-    """.}
+    var seek: SLSeekItf
+    let res = pl.getInterface(seek)
+    if res == SL_RESULT_SUCCESS:
+        discard seek.setLoop(flag, 0, SL_TIME_UNKNOWN)
 
 proc setLooping*(s: Sound, flag: bool) =
     s.mLooping = flag
@@ -132,53 +107,26 @@ proc setLooping*(s: Sound, flag: bool) =
     if not pl.isNil:
         pl.setLooping(flag)
 
-var activeSounds = newSeq[Sound]()
+var activeSounds: seq[Sound]
 
-const
-    SL_PLAYSTATE_STOPPED = 0x00000001'u32
-    SL_PLAYSTATE_PAUSED = 0x00000002'u32
-    SL_PLAYSTATE_PLAYING = 0x00000003'u32
-
-proc playState(pl: SLObjectItf): uint32 =
+proc playState(pl: SLObjectItf): SLPlayState =
     if not pl.isNil:
-        var state: uint32
-        {.emit: """
-        SLPlayItf player;
-        int res = (*`pl`)->GetInterface(`pl`, SL_IID_PLAY, &player);
-        res = (*player)->GetPlayState(player, &`state`);
-        """.}
-        return state
+        var player: SLPlayItf
+        discard pl.getInterface(player)
+        discard player.getPlayState(result)
 
-#[
-proc playState*(s: Sound): uint32 =
-    return s.player.playState()
+proc setPlayState(pl: SLObjectItf not nil, state: SLPlayState) =
+    var player: SLPlayItf
+    discard pl.getInterface(player)
+    var seek: SLSeekItf
+    discard pl.getInterface(seek)
+    discard seek.setLoop(false, 0, SL_TIME_UNKNOWN)
+    discard player.setPlayState(state)
 
-proc isPlaying*(s: Sound): bool =
-    return s.player.playState() == SL_PLAYSTATE_PLAYING
-
-proc isPaused*(s: Sound): bool =
-    return s.player.playState() == SL_PLAYSTATE_PAUSED
-
-proc isStopped*(s: Sound): bool =
-    return s.player.playState() == SL_PLAYSTATE_STOPPED
-]#
-
-proc setPlayState(pl: SLObjectItf not nil, state: uint32) =
-    {.emit: """
-    SLPlayItf player;
-    int res = (*`pl`)->GetInterface(`pl`, SL_IID_PLAY, &player);
-    SLSeekItf seek;
-    res = (*`pl`)->GetInterface(`pl`, SL_IID_SEEK, &seek);
-    (*seek)->SetLoop(seek, SL_BOOLEAN_FALSE, 0, SL_TIME_UNKNOWN);
-    (*player)->SetPlayState(player, `state`);
-    """.}
-
-proc getPlayState(pl: SLObjectItf): uint32 =
-    {.emit: """
-    SLPlayItf player;
-    int res = (*`pl`)->GetInterface(`pl`, SL_IID_PLAY, &player);
-    (*player)->GetPlayState(player, &`result`);
-    """.}
+proc getPlayState(pl: SLObjectItf): SLPlayState =
+    var player: SLPlayItf
+    discard pl.getInterface(player)
+    discard player.getPlayState(result)
 
 # Destroying OpenSL players may cause dead lock.
 # It's a system issue :(
@@ -194,10 +142,8 @@ var deletionThreads = 0
 {.push stackTrace: off.}
 proc deletionThread(p: pointer) {.cdecl.} =
     atomicInc deletionThreads
-    {.emit: """
-    SLObjectItf item = (SLObjectItf)`p`;
-    (*item)->Destroy(item);
-    """.}
+    let item = cast[SLObjectItf](p)
+    item.destroy()
     atomicDec deletionThreads
 {.pop.}
 
@@ -257,55 +203,53 @@ proc collectInactiveSounds() =
             activeSounds.del(i)
             break
 
+proc assumeNotNil[T](v: T): T not nil {.inline.} =
+    ## Workaround for nim bug #5781
+    assert(not v.isNil)
+    result = cast[T not nil](v)
+
 proc play*(s: Sound) =
     # Define which sound is stopped and can be reused
-    var sindex = -1
     var pl = s.player
-    var slres = 0'u32
     if pl.isNil:
         collectInactiveSounds()
     else:
-        pl.destroy(s.fd)
+        assumeNotNil(pl).destroy(s.fd)
         s.player = nil
         pl = nil
 
     let rd = loadResourceDescriptor(s.path)
     s.fd = rd.descriptor
-    {.emit: """
-    SLDataLocator_AndroidFD locatorIn = {
-        SL_DATALOCATOR_ANDROIDFD,
-        `rd`.descriptor,
-        `rd`.start,
-        `rd`.length
-    };
+    var locatorIn = SLDataLocator_AndroidFD(
+        locatorType: SL_DATALOCATOR_TYPE_ANDROIDFD,
+        fd: rd.descriptor,
+        offset: rd.start,
+        length: rd.length)
 
-    SLDataFormat_MIME dataFormat = {
-        SL_DATAFORMAT_MIME,
-        NULL,
-        SL_CONTAINERTYPE_UNSPECIFIED
-    };
+    var dataFormat = SLDataFormat_MIME(
+        formatType: SL_DATAFORMAT_TYPE_MIME,
+        containerType: SL_CONTAINERTYPE_UNSPECIFIED)
 
-    SLDataSource audioSrc = {&locatorIn, &dataFormat};
+    var audioSrc = SLDataSource(
+        locator: addr locatorIn,
+        format: addr dataFormat)
 
-    SLDataLocator_OutputMix dataLocatorOut = {
-        SL_DATALOCATOR_OUTPUTMIX,
-        `gOutputMix`
-    };
+    var dataLocatorOut = SLDataLocator_OutputMix(
+        locatorType: SL_DATALOCATOR_TYPE_OUTPUTMIX,
+        outputMix: gOutputMix)
 
-    SLDataSink audioSnk = {&dataLocatorOut, NULL};
-    const SLInterfaceID pIDs[] = {SL_IID_PLAY, SL_IID_SEEK, SL_IID_VOLUME};
-    const SLboolean pIDsRequired[] = {SL_BOOLEAN_TRUE, SL_BOOLEAN_TRUE, SL_BOOLEAN_TRUE};
-    `slres` = (*`gEngine`)->CreateAudioPlayer(`gEngine`, &`pl`, &audioSrc, &audioSnk, 3, pIDs, pIDsRequired);
-    if (`slres` == SL_RESULT_SUCCESS) {
-        `slres` = (*`pl`)->Realize(`pl`, SL_BOOLEAN_FALSE);
-    }
-    """.}
-    if slres == 0:
+    var audioSnk = SLDataSink(locator: addr dataLocatorOut)
+    var slres = gEngine.createAudioPlayer(pl, addr audioSrc, addr audioSnk,
+        [SL_IID_PLAY, SL_IID_SEEK, SL_IID_VOLUME], [SL_TRUE, SL_TRUE, SL_TRUE])
+
+    if slres == SL_RESULT_SUCCESS:
+        discard pl.realize()
         s.player = pl
         if not pl.isNil:
-            pl.setLooping(s.mLooping)
-            pl.setGain(s.mGain)
-            pl.setPlayState(SL_PLAYSTATE_PLAYING)
+            pl.assumeNotNil.setLooping(s.mLooping)
+            pl.assumeNotNil.setGain(s.mGain)
+            pl.assumeNotNil.setPlayState(SL_PLAYSTATE_PLAYING)
+        if activeSounds.isNil: activeSounds = @[]
         activeSounds.add(s)
     else:
         s.player = nil
@@ -313,21 +257,15 @@ proc play*(s: Sound) =
 proc duration*(s: Sound): float =
     let pl = s.player
     if not pl.isNil:
-        var msDuration : uint32 = 0xFFFFFFFFu32
-        var res:cint = 0
-        {.emit: """
-        SLPlayItf player;
-        `res` = (*`pl`)->GetInterface(`pl`, SL_IID_PLAY, &player);
-        """.}
+        var msDuration = SL_TIME_UNKNOWN
+        var player: SLPlayItf
+        var res = pl.getInterface(player)
 
-        if res == 0:
+        if res == SL_RESULT_SUCCESS:
             var st = 0.0
-            while msDuration == 0xFFFFFFFFu32 and res == 0:
-                {.emit: """
-                `res` = (*player)->GetDuration(player, &`msDuration`);
-                """.}
-
-                if res == 0 and msDuration == 0xFFFFFFFFu32:
+            while msDuration == SL_TIME_UNKNOWN and res == SL_RESULT_SUCCESS:
+                res = player.getDuration(msDuration)
+                if res == SL_RESULT_SUCCESS and msDuration == SL_TIME_UNKNOWN:
                     if st == 0.0:
                         st = epochTime()
                     elif epochTime() - st > 0.2:
