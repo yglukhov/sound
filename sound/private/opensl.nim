@@ -85,13 +85,13 @@ type
                                 pInterfaceRequired: ptr SLboolean): SLresult {.cdecl.}
 
         QueryNumSupportedInterfaces*: proc(self: SLEngineItf, objectID: uint32,
-                                pNumSupportedInterfaces: ptr uint32): SLresult {.cdecl.}
+                                pNumSupportedInterfaces: var uint32): SLresult {.cdecl.}
 
         QuerySupportedInterfaces*: proc(self: SLEngineItf, objectID, index: uint32,
-                                pInterfaceId: ptr SLInterfaceID): SLresult {.cdecl.}
+                                pInterfaceId: var SLInterfaceID): SLresult {.cdecl.}
 
         QueryNumSupportedExtensions*: proc(self: SLEngineItf,
-                                pNumExtensions: ptr uint32): SLresult {.cdecl.}
+                                pNumExtensions: var uint32): SLresult {.cdecl.}
 
         QuerySupportedExtension*: proc(self: SLEngineItf, index: uint32,
                                 pExtensionName: ptr char,
@@ -285,14 +285,21 @@ proc slCreateEngineImpl(pEngine: var SLObjectItf,
     numOptions: uint32, pEngineOptions: ptr SLEngineOption,
     numInterfaces: uint32, pInterfaceIds: ptr SLInterfaceID, pInterfaceRequired: ptr SLBoolean): SLresult {.importc: "slCreateEngine".}
 
+template numInterfaces: uint32 =
+    assert(interfaces.len == interfaceRequired.len)
+    uint32(interfaces.len)
+
+template pInterfaces: ptr SLInterfaceID =
+    if interfaces.len == 0: nil else: unsafeAddr interfaces[0]
+
+template pInterfaceRequired: ptr SLboolean =
+    if interfaceRequired.len == 0: nil else: unsafeAddr interfaceRequired[0]
+
 {.push inline.}
 
-proc slCreateEngine*(pEngine: var SLObjectItf, options: openarray[SLEngineOption], interfaceIds: openarray[SLInterfaceID], interfaceRequired: openarray[SLBoolean]): SLresult =
-    assert(interfaceIds.len == interfaceRequired.len)
+proc slCreateEngine*(pEngine: var SLObjectItf, options: openarray[SLEngineOption], interfaces: openarray[SLInterfaceID], interfaceRequired: openarray[SLBoolean]): SLresult =
     let pOptions = if options.len == 0: nil else: unsafeAddr options[0]
-    let pInterfaceIds = if interfaceIds.len == 0: nil else: unsafeAddr interfaceIds[0]
-    let pRequired = if interfaceRequired.len == 0: nil else: unsafeAddr interfaceRequired[0]
-    slCreateEngineImpl(pEngine, uint32(options.len), pOptions, uint32(interfaceIds.len), pInterfaceIds, pRequired)
+    slCreateEngineImpl(pEngine, uint32(options.len), pOptions, numInterfaces, pInterfaces, pInterfaceRequired)
 
 # SLObjectItf wrappers
 proc realize*(self: SLObjectItf, async: bool = false): SLresult = self.Realize(self, SLboolean(async))
@@ -321,23 +328,84 @@ proc getInterface*(obj: SLObjectItf, seek: var SLSeekItf): SLresult =
 proc getInterface*(obj: SLObjectItf, play: var SLPlayItf): SLresult =
     obj.getInterface(SL_IID_PLAY, cast[ptr pointer](addr play))
 
-# SLEngineItf wrappers. TODO: complete this
+# SLEngineItf wrappers
+proc createLEDDevice*(self: SLEngineItf, pDevice: var SLObjectItf,
+                                deviceID: uint32, interfaces: openarray[SLInterfaceID],
+                                interfaceRequired: openarray[SLboolean]): SLresult =
+    self.CreateLEDDevice(self, pDevice, deviceID, numInterfaces, pInterfaces, pInterfaceRequired)
+
+proc createVibraDevice*(self: SLEngineItf, pDevice: var SLObjectItf,
+                                deviceID: uint32, interfaces: openarray[SLInterfaceID],
+                                interfaceRequired: openarray[SLboolean]): SLresult =
+    self.CreateVibraDevice(self, pDevice, deviceID, numInterfaces, pInterfaces, pInterfaceRequired)
+
 proc createAudioPlayer*(self: SLEngineItf, pPlayer: var SLObjectItf,
                                 pAudioSrc: ptr SLDataSource, pAudioSnk: ptr SLDataSink,
                                 interfaces: openarray[SLInterfaceID],
                                 interfaceRequired: openarray[SLboolean]): SLresult =
-    assert(interfaces.len == interfaceRequired.len)
-    let pInterfaces = if interfaces.len == 0: nil else: unsafeAddr interfaces[0]
-    let pInterfaceRequired = if interfaceRequired.len == 0: nil else: unsafeAddr interfaceRequired[0]
-    self.CreateAudioPlayer(self, pPlayer, pAudioSrc, pAudioSnk, uint32(interfaces.len), pInterfaces, pInterfaceRequired)
+    self.CreateAudioPlayer(self, pPlayer, pAudioSrc, pAudioSnk, numInterfaces, pInterfaces, pInterfaceRequired)
+
+proc createAudioRecorder*(self: SLEngineItf, pRecorder: var SLObjectItf,
+                                pAudioSrc: ptr SLDataSource, pAudioSnk: ptr SLDataSink,
+                                interfaces: openarray[SLInterfaceID],
+                                interfaceRequired: openarray[SLboolean]): SLresult =
+    self.CreateAudioRecorder(self, pRecorder, pAudioSrc, pAudioSnk, numInterfaces, pInterfaces, pInterfaceRequired)
+
+proc createMidiPlayer*(self: SLEngineItf, pPlayer: var SLObjectItf,
+                                pMIDISrc, pBankSrc: ptr SLDataSource,
+                                pAudioOutput, pVibra, pLEDArray: ptr SLDataSink,
+                                interfaces: openarray[SLInterfaceID],
+                                interfaceRequired: openarray[SLboolean]): SLresult =
+    self.CreateMidiPlayer(self, pPlayer, pMIDISrc, pBankSrc, pAudioOutput, pVibra, pLEDArray, numInterfaces, pInterfaces, pInterfaceRequired)
+
+proc createListener*(self: SLEngineItf, pListener: var SLObjectItf,
+                                interfaces: openarray[SLInterfaceID],
+                                interfaceRequired: openarray[SLboolean]): SLresult =
+    self.CreateListener(self, pListener, numInterfaces, pInterfaces, pInterfaceRequired)
+
+proc create3DGroup*(self: SLEngineItf, pGroup: var SLObjectItf,
+                                interfaces: openarray[SLInterfaceID],
+                                interfaceRequired: openarray[SLboolean]): SLresult =
+    self.Create3DGroup(self, pGroup, numInterfaces, pInterfaces, pInterfaceRequired)
 
 proc createOutputMix*(self: SLEngineItf, pMix: var SLObjectItf,
                                 interfaces: openarray[SLInterfaceID],
                                 interfaceRequired: openarray[SLboolean]): SLresult =
-    assert(interfaces.len == interfaceRequired.len)
-    let pInterfaces = if interfaces.len == 0: nil else: unsafeAddr interfaces[0]
-    let pInterfaceRequired = if interfaceRequired.len == 0: nil else: unsafeAddr interfaceRequired[0]
-    self.CreateOutputMix(self, pMix, uint32(interfaces.len), pInterfaces, pInterfaceRequired)
+    self.CreateOutputMix(self, pMix, numInterfaces, pInterfaces, pInterfaceRequired)
+
+proc createMetadataExtractor*(self: SLEngineItf, pMetadataExtractor: var SLObjectItf,
+                                pDataSource: ptr SLDataSource,
+                                interfaces: openarray[SLInterfaceID],
+                                interfaceRequired: openarray[SLboolean]): SLresult =
+    self.CreateMetadataExtractor(self, pMetadataExtractor, pDataSource, numInterfaces, pInterfaces, pInterfaceRequired)
+
+proc createExtensionObject*(self: SLEngineItf, pObject: var SLObjectItf,
+                                pParameters: pointer, objectID: uint32,
+                                interfaces: openarray[SLInterfaceID],
+                                interfaceRequired: openarray[SLboolean]): SLresult =
+    self.CreateExtensionObject(self, pObject, pParameters, objectID, numInterfaces, pInterfaces, pInterfaceRequired)
+
+proc queryNumSupportedInterfaces*(self: SLEngineItf, objectID: uint32,
+                                pNumSupportedInterfaces: var uint32): SLresult =
+    self.QueryNumSupportedInterfaces(self, objectID, pNumSupportedInterfaces)
+
+proc querySupportedInterfaces*(self: SLEngineItf, objectID, index: uint32,
+                                pInterfaceId: var SLInterfaceID): SLresult =
+    self.QuerySupportedInterfaces(self, objectID, index, pInterfaceId)
+
+proc queryNumSupportedExtensions*(self: SLEngineItf, pNumExtensions: var uint32): SLresult =
+    self.QueryNumSupportedExtensions(self, pNumExtensions)
+
+proc querySupportedExtension*(self: SLEngineItf, index: uint32,
+                                pExtensionName: ptr char,
+                                pNameLength: ptr int16): SLresult =
+    self.QuerySupportedExtension(self, index, pExtensionName, pNameLength)
+
+proc isExtensionSupported*(self: SLEngineItf, pExtensionName: cstring,
+                                pSupported: var bool): SLresult =
+    var res: SLboolean
+    result = self.IsExtensionSupported(self, pExtensionName, res)
+    pSupported = bool(res)
 
 # SLVolumeItf wrappers
 proc setVolumeLevel*(self: SLVolumeItf, level: SLmillibel): SLresult = self.SetVolumeLevel(self, level)
@@ -364,10 +432,18 @@ proc getLoop*(self: SLSeekItf, loopEnable: var bool, startPos, endPos: var SLmil
     result = self.GetLoop(self, enable, startPos, endPos)
     loopEnable = bool(enable)
 
-# SLPlayItf wrappers. TODO: complete this.
+# SLPlayItf wrappers
 proc setPlayState*(self: SLPlayItf, state: SLPlayState): SLresult = self.SetPlayState(self, state)
 proc getPlayState*(self: SLPlayItf, state: var SLPlayState): SLresult = self.GetPlayState(self, state)
 proc getDuration*(self: SLPlayItf, msec: var SLmillisecond): SLresult = self.GetDuration(self, msec)
 proc getPosition*(self: SLPlayItf, msec: var SLmillisecond): SLresult = self.GetPosition(self, msec)
+proc registerCallback*(self: SLPlayItf, callback: SLPlayCallback, context: pointer): SLresult = self.RegisterCallback(self, callback, context)
+proc setCallbackEventsMask*(self: SLPlayItf, eventFlags: uint32): SLresult = self.SetCallbackEventsMask(self, eventFlags)
+proc getCallbackEventsMask*(self: SLPlayItf, eventFlags: var uint32): SLresult = self.GetCallbackEventsMask(self, eventFlags)
+proc setMarkerPosition*(self: SLPlayItf, mSec: SLmillisecond): SLresult = self.SetMarkerPosition(self, mSec)
+proc clearMarkerPosition*(self: SLPlayItf): SLresult = self.ClearMarkerPosition(self)
+proc getMarkerPosition*(self: SLPlayItf, mSec: var SLmillisecond): SLresult = self.GetMarkerPosition(self, mSec)
+proc setPositionUpdatePeriod*(self: SLPlayItf, mSec: SLmillisecond): SLresult = self.SetPositionUpdatePeriod(self, mSec)
+proc getPositionUpdatePeriod*(self: SLPlayItf, mSec: var SLmillisecond): SLresult = self.GetPositionUpdatePeriod(self, mSec)
 
 {.pop.}
