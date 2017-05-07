@@ -295,7 +295,7 @@ template pInterfaces: ptr SLInterfaceID =
 template pInterfaceRequired: ptr SLboolean =
     if interfaceRequired.len == 0: nil else: unsafeAddr interfaceRequired[0]
 
-{.push inline.}
+{.push inline, stackTrace: off.}
 
 proc slCreateEngine*(pEngine: var SLObjectItf, options: openarray[SLEngineOption], interfaces: openarray[SLInterfaceID], interfaceRequired: openarray[SLBoolean]): SLresult =
     let pOptions = if options.len == 0: nil else: unsafeAddr options[0]
