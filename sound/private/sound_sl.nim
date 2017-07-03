@@ -2,14 +2,9 @@ import jnim
 import math, times, logging, posix
 import opensl
 import android.ndk.aasset_manager
-
-jclassDef android.content.res.AssetManager of JVMObject
-
-jclass android.app.Application of JVMObject:
-    proc getAssets: AssetManager
-
-jclass android.app.Activity of JVMObject:
-    proc getApplication: Application
+import android.app.activity
+import android.content.res.asset_manager
+import android.content.context
 
 type Sound* = ref object
     player: SLObjectItf
@@ -28,8 +23,7 @@ const TRASH_TIMEOUT = 0.5
 var gTrash = newSeq[tuple[item: SLObjectItf, fd: cint, time: float]]()
 
 proc initSoundEngineWithActivity*(a: jobject) =
-    var am = Activity.fromJObject(a).getApplication().getAssets().get()
-    gAssetManager = AAssetManager_fromJava(am)
+    gAssetManager = Activity.fromJObject(a).getApplication().getAssets().getNative()
 
 proc initEngine() =
     if engineInited: return
