@@ -46,7 +46,7 @@ const
     AL_PAUSED* : ALenum =                              0x1013
     AL_STOPPED* : ALenum =                             0x1014
 
-proc alGenBuffers*(n: ALsizei , buffers: ptr ALuint) {.alimport.}
+proc alGenBuffers*(n: ALsizei, buffers: ptr ALuint) {.alimport.}
 proc alGenSources*(n: ALsizei, sources: ptr ALuint) {.alimport.}
 
 proc alSourcei*(sid: ALuint, param: ALenum, value: ALint) {.alimport.}
