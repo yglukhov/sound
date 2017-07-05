@@ -1,4 +1,7 @@
-when defined(macosx) or defined(ios) or defined(windows):
+when defined(macosx) or defined(ios):
+    include private.sound_al
+elif defined(windows):
+#    include private.sound_xaudio2 # Not yet...
     include private.sound_al
 elif defined(android):
     include private.sound_sl

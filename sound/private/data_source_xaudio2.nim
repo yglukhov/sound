@@ -1,44 +1,32 @@
-import openal, context_al
+import winlean, streams
+import context_xaudio2
 import vorbis_utils
-import streams
 
 type
     DataSource* = ref object
+        wfx*: WAVEFORMATEX
+        data*: seq[uint8]
         mDuration*: float
-        mBuffer*: ALuint
-
-proc finalizeDataSource(s: DataSource) =
-    if s.mBuffer != 0: alDeleteSources(1, addr s.mBuffer)
 
 proc newDataSource(): DataSource =
     createContext()
-    result.new(finalizeDataSource)
-
-proc alFormat(channels, bitsPerSample: int): ALenum {.inline.} =
-    if channels == 1:
-        if bitsPerSample == 16:
-            result = AL_FORMAT_MONO16
-        elif bitsPerSample == 8:
-            result = AL_FORMAT_MONO8
-    else:
-        if bitsPerSample == 16:
-            result = AL_FORMAT_STEREO16
-        elif bitsPerSample == 8:
-            result = AL_FORMAT_STEREO8
+    result.new()
 
 proc newDataSourceWithPCMData*(data: pointer, dataLength, channels, bitsPerSample, samplesPerSecond: int): DataSource =
     result = newDataSource()
 
-    let freq = ALsizei(samplesPerSecond)
-
-    if not alContext.isNil:
-        alGenBuffers(1, addr result.mBuffer)
-        # Upload sound data to buffer
-        alBufferData(result.mBuffer, alFormat(channels, bitsPerSample), data, ALsizei(dataLength), freq)
-
     let bytesPerSample = bitsPerSample div 8
     let samplesInChannel = dataLength div bytesPerSample
-    result.mDuration = (samplesInChannel.ALint / (freq.ALint * channels).ALint).float
+    result.mDuration = samplesInChannel / (samplesPerSecond * channels)
+
+    result.wfx.wFormatTag = 1
+    result.wfx.nChannels = WORD(channels)
+    result.wfx.nSamplesPerSec = DWORD(samplesPerSecond)
+    result.wfx.wBitsPerSample = WORD(bitsPerSample)
+    result.wfx.nBlockAlign = WORD((bitsPerSample * channels) div 8)
+
+    result.data = newSeq[uint8](dataLength)
+    copyMem(addr result.data[0], data, dataLength)
 
 proc newDataSourceWithPCMData*(data: openarray[byte], channels, bitsPerSample, samplesPerSecond: int): DataSource {.inline.} =
     ## This function is only availbale for openal for now. Sorry.
@@ -53,7 +41,7 @@ proc newDataSourceWithFile*(path: string): DataSource =
 
 proc newDataSourceWithStream*(s: Stream): DataSource =
     var buffer: pointer
-    var len, bitsPerSample, channels, samplesPerSecond: int
+    var len, channels, bitsPerSample, samplesPerSecond: int
     loadVorbisStream(s, buffer, len, channels, bitsPerSample, samplesPerSecond)
     result = newDataSourceWithPCMData(buffer, len, channels, bitsPerSample, samplesPerSecond)
     freeVorbisBuffer(buffer)
