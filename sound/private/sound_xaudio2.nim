@@ -63,16 +63,6 @@ proc play*(s: Sound) =
         discard s.sourceVoice.SetVolume(s.sourceVoice, s.mGain, 0)
         discard s.sourceVoice.Start(s.sourceVoice, 0, 0)
 
-
-            # if s.src == 0:
-            #     alGenSources(1, addr s.src)
-            # alSourcei(s.src, AL_BUFFER, cast[ALint](s.mDataSource.mBuffer))
-            # alSourcef(s.src, AL_GAIN, s.mGain)
-            # alSourcei(s.src, AL_LOOPING, ALint(s.mLooping))
-            # alSourcePlay(s.src)
-
-        discard s.sourceVoice.Start(s.sourceVoice, 0, 0)
-
 proc stop*(s: Sound) =
     if not s.sourceVoice.isNil:
         discard s.sourceVoice.Stop(s.sourceVoice, 0, 0)
