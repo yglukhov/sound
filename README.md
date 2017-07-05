@@ -3,9 +3,10 @@
 Cross-platform sound mixer library
 
 The library is using different "backends" depending on target platform:
-- OpenAL + ogg + vorbis - Windows, Linux, Mac, iOS
-- SLES - Android
-- AudioContext - Web
+- **Linux**, **MacOS**, **iOS**: OpenAL. Supported formats: ogg+vorbis
+- **Windows**: XAudio2. Supported formats: ogg+vorbis
+- **Android**: SLES. Supported formats: ogg+vorbis
+- **JavaScript**, **Asm.js**: WebAudio. Supported formats: mp3 (and ogg+vorbis on some browsers)
 
 Usage:
 ```nim
