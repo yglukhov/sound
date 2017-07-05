@@ -91,13 +91,13 @@ type
         GetFilterParameters*: pointer
         SetOutputFilterParameters*: pointer
         GetOutputFilterParameters*: pointer
-        SetVolume*: pointer
+        SetVolume*: proc(self: IXAudio2SourceVoice, Volume: cfloat, OperationSet: uint32): HRESULT {.stdcall.}
         GetVolume*: pointer
         SetChannelVolumes*: pointer
         GetChannelVolumes*: pointer
         SetOutputMatrix*: pointer
         GetOutputMatrix*: pointer
-        DestroyVoice*: pointer
+        DestroyVoice*: proc(self: IXAudio2SourceVoice): HRESULT {.stdcall.}
 
     IXAudio2Voice* = ptr ptr IXAudio2VoiceObj
 
@@ -147,6 +147,9 @@ type
     XAUDIO2_PROCESSOR = uint32
     HRESULT* = int32
 
+const
+    XAUDIO2_VOICE_NOSAMPLESPLAYED* = 0x0100
+    XAUDIO2_LOOP_INFINITE* = 255
 
 var CLSID_XAudio2*: GUID = GUID(D1: 0x5a508685, D2: 0xa254'i16, D3: 0x4fba, D4: [
     0x9b'i8, 0x82'i8, 0x9a'i8, 0x24'i8, 0xb0'i8, 0x03'i8, 0x06'i8, 0xaf'i8])

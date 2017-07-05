@@ -1,41 +1,93 @@
-import dynlib, winlean
+import winlean, streams
 import stb_vorbis
 import context_xaudio2, data_source_xaudio2
 
 type Sound* = ref object
     sourceVoice: IXAudio2SourceVoice
     mDataSource: DataSource
+    mGain: cfloat
+    mLooping: bool
 
 var activeSounds: seq[Sound]
 
-proc finalizeSound(s: Sound) =
-    discard
-
 proc newSound(): Sound =
-    result.new(finalizeSound)
-
-proc deleteSourceVoice(s: Sound) =
-    discard
+    result.new()
+    result.mGain = 1.0
 
 proc `dataSource=`(s: Sound, dataSource: DataSource) =
     s.mDataSource = dataSource
-    if not s.sourceVoice.isNil:
-        s.deleteSourceVoice()
-        s.sourceVoice = nil
-    if not dataSource.isNil:
-        discard ixaudio2.CreateSourceVoice(ixaudio2, addr s.sourceVoice, addr dataSource.wfx, 0, 0, nil, nil, nil)
-        var buf: XAUDIO2_BUFFER
-        buf.pAudioData = addr dataSource.data[0]
-        buf.AudioBytes = uint32(dataSource.data.len)
-        echo "submit: ", s.sourceVoice.SubmitSourceBuffer(s.sourceVoice, addr buf, nil)
 
 proc newSoundWithFile*(path: string): Sound =
     createContext()
     result = newSound()
     result.dataSource = newDataSourceWithFile(path)
 
-proc stop*(s: Sound) =
-    discard s.sourceVoice.Stop(s.sourceVoice, 0, 0)
+proc newSoundWithStream*(s: Stream): Sound =
+    createContext()
+    result = newSound()
+    result.dataSource = newDataSourceWithStream(s)
+
+
+proc isPlaying(s: IXAudio2SourceVoice): bool {.inline.} =
+    var state: XAUDIO2_VOICE_STATE
+    discard s.GetState(s, state, XAUDIO2_VOICE_NOSAMPLESPLAYED)
+    result = state.BuffersQueued != 0
+
+proc reclaimInactiveSource() {.inline.} =
+    for i in 0 ..< activeSounds.len:
+        let src = activeSounds[i].sourceVoice
+        if not src.isPlaying:
+            discard src.DestroyVoice(src)
+            activeSounds[i].sourceVoice = nil
+            activeSounds.del(i)
+            break
+
+proc submitBuffer(s: Sound) =
+    var buf: XAUDIO2_BUFFER
+    buf.pAudioData = addr s.mDataSource.data[0]
+    buf.AudioBytes = uint32(s.mDataSource.data.len)
+    if s.mLooping:
+        buf.LoopCount = XAUDIO2_LOOP_INFINITE
+    discard s.sourceVoice.SubmitSourceBuffer(s.sourceVoice, addr buf, nil)
 
 proc play*(s: Sound) =
-    discard s.sourceVoice.Start(s.sourceVoice, 0, 0)
+    if not s.mDataSource.isNil:
+        if s.sourceVoice.isNil:
+            reclaimInactiveSource()
+            if activeSounds.isNil: activeSounds = @[]
+            activeSounds.add(s)
+        else:
+            discard s.sourceVoice.DestroyVoice(s.sourceVoice)
+        discard ixaudio2.CreateSourceVoice(ixaudio2, addr s.sourceVoice, addr s.mDataSource.wfx, 0, 0, nil, nil, nil)
+        s.submitBuffer()
+        discard s.sourceVoice.SetVolume(s.sourceVoice, s.mGain, 0)
+        discard s.sourceVoice.Start(s.sourceVoice, 0, 0)
+
+
+            # if s.src == 0:
+            #     alGenSources(1, addr s.src)
+            # alSourcei(s.src, AL_BUFFER, cast[ALint](s.mDataSource.mBuffer))
+            # alSourcef(s.src, AL_GAIN, s.mGain)
+            # alSourcei(s.src, AL_LOOPING, ALint(s.mLooping))
+            # alSourcePlay(s.src)
+
+        discard s.sourceVoice.Start(s.sourceVoice, 0, 0)
+
+proc stop*(s: Sound) =
+    if not s.sourceVoice.isNil:
+        discard s.sourceVoice.Stop(s.sourceVoice, 0, 0)
+
+proc `gain=`*(s: Sound, v: float) =
+    s.mGain = v
+    if not s.sourceVoice.isNil:
+        discard s.sourceVoice.SetVolume(s.sourceVoice, s.mGain, 0)
+
+proc gain*(s: Sound): float {.inline.} = s.mGain
+
+proc setLooping*(s: Sound, flag: bool) =
+    if s.mLooping != flag:
+        s.mLooping = flag
+        if not s.sourceVoice.isNil:
+            s.submitBuffer()
+
+proc duration*(s: Sound): float {.inline.} = s.mDataSource.mDuration
