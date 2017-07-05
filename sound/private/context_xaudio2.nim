@@ -78,7 +78,7 @@ type
     # STDMETHOD_(void, SetDebugConfiguration) (THIS_ __in_opt const XAUDIO2_DEBUG_CONFIGURATION* pDebugConfiguration,
     #                                          __in_opt __reserved void* pReserved X2DEFAULT(NULL)) PURE;
 
-    IXAudio2Voice* = ptr ptr object {.pure, inheritable.}
+    IXAudio2VoiceObj {.pure, inheritable.} = object
         GetVoiceDetails*: pointer
         SetOutputVoices*: pointer
         SetEffectChain*: pointer
@@ -99,54 +99,18 @@ type
         GetOutputMatrix*: pointer
         DestroyVoice*: pointer
 
-    IXAudio2MasteringVoice* = ptr ptr object
-        GetVoiceDetails*: pointer
-        SetOutputVoices*: pointer
-        SetEffectChain*: pointer
-        EnableEffect*: pointer
-        DisableEffect*: pointer
-        GetEffectState*: pointer
-        SetEffectParameters*: pointer
-        GetEffectParameters*: pointer
-        SetFilterParameters*: pointer
-        GetFilterParameters*: pointer
-        SetOutputFilterParameters*: pointer
-        GetOutputFilterParameters*: pointer
-        SetVolume*: pointer
-        GetVolume*: pointer
-        SetChannelVolumes*: pointer
-        GetChannelVolumes*: pointer
-        SetOutputMatrix*: pointer
-        GetOutputMatrix*: pointer
-        DestroyVoice*: pointer
+    IXAudio2Voice* = ptr ptr IXAudio2VoiceObj
 
-    IXAudio2SourceVoice* = ptr ptr object
-        GetVoiceDetails*: pointer
-        SetOutputVoices*: pointer
-        SetEffectChain*: pointer
-        EnableEffect*: pointer
-        DisableEffect*: pointer
-        GetEffectState*: pointer
-        SetEffectParameters*: pointer
-        GetEffectParameters*: pointer
-        SetFilterParameters*: pointer
-        GetFilterParameters*: pointer
-        SetOutputFilterParameters*: pointer
-        GetOutputFilterParameters*: pointer
-        SetVolume*: pointer
-        GetVolume*: pointer
-        SetChannelVolumes*: pointer
-        GetChannelVolumes*: pointer
-        SetOutputMatrix*: pointer
-        GetOutputMatrix*: pointer
-        DestroyVoice*: pointer
+    IXAudio2MasteringVoice* = ptr ptr object of IXAudio2Voice
+
+    IXAudio2SourceVoice* = ptr ptr object of IXAudio2Voice
         Start*: proc(self: IXAudio2SourceVoice, Flags: uint32, OperationSet: uint32): HRESULT {.stdcall.}
         Stop*: proc(self: IXAudio2SourceVoice, Flags: uint32, OperationSet: uint32): HRESULT {.stdcall.}
         SubmitSourceBuffer*: proc(self: IXAudio2SourceVoice, buf: ptr XAUDIO2_BUFFER, pBufferWMA: pointer = nil): HRESULT {.stdcall.}
         FlushSourceBuffers*: pointer
         Discontinuity*: pointer
         ExitLoop*: pointer
-        GetState*: pointer
+        GetState*: proc(self: IXAudio2SourceVoice, pVoiceState: var XAUDIO2_VOICE_STATE, Flags: uint32): HRESULT {.stdcall.}
         SetFrequencyRatio*: pointer
         GetFrequencyRatio*: pointer
         SetSourceSampleRate*: pointer
@@ -171,6 +135,11 @@ type
         LoopLength*: uint32
         LoopCount*: uint32
         pContext*: pointer
+
+    XAUDIO2_VOICE_STATE* = object
+        pCurrentBufferContext*: pointer
+        BuffersQueued*: uint32
+        SamplesPlayed*: uint64
 
     IXAudio2VoiceCallback = ptr ptr object
 
