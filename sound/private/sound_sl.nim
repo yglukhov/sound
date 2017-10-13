@@ -15,6 +15,7 @@ type Sound* = ref object
 
 var engineInited = false
 
+var gJAssetManager: AssetManager # Used to keep the reference alive
 var gAssetManager : AAssetManager
 var gEngine : SLEngineItf # = nil
 var gOutputMix : SLObjectItf
@@ -23,7 +24,8 @@ const TRASH_TIMEOUT = 0.5
 var gTrash = newSeq[tuple[item: SLObjectItf, fd: cint, time: float]]()
 
 proc initSoundEngineWithActivity*(a: jobject) =
-    gAssetManager = Activity.fromJObject(a).getApplication().getAssets().getNative()
+    gJAssetManager = Activity.fromJObject(a).getApplication().getAssets()
+    gAssetManager = gJAssetManager.getNative()
 
 proc initEngine() =
     if engineInited: return
