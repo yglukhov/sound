@@ -20,8 +20,8 @@ var gAssetManager : AAssetManager
 var gEngine : SLEngineItf # = nil
 var gOutputMix : SLObjectItf
 
-const TRASH_TIMEOUT = 0.5
-var gTrash = newSeq[tuple[item: SLObjectItf, fd: cint, time: float]]()
+const TRASH_TIMEOUT = 0.1
+var gTrash: seq[tuple[item: SLObjectItf, fd: cint, time: float]]
 
 proc initSoundEngineWithActivity*(a: jobject) =
     gJAssetManager = Activity.fromJObject(a).getApplication().getAssets()
@@ -155,6 +155,7 @@ proc collectTrash() {.inline.} =
 proc destroy(pl: SLObjectItf not nil, fd: cint) =
     collectTrash()
     setPlayState(pl, SL_PLAYSTATE_STOPPED)
+    if gTrash.isNil: gTrash = @[]
     gTrash.add( (item: pl, fd: fd, time: epochTime()) )
 
 proc stop*(s: Sound) =
@@ -232,6 +233,8 @@ proc play*(s: Sound) =
         activeSounds.add(s)
     else:
         s.player = nil
+        if s.fd >= 0:
+            discard close(s.fd)
 
 proc duration*(s: Sound): float =
     let pl = s.player
