@@ -97,6 +97,12 @@ proc playState(pl: SLObjectItf): SLPlayState =
         discard pl.getInterface(player)
         discard player.getPlayState(result)
 
+proc restart(pl: SLObjectItf not nil) {.inline.} =
+    var player: SLPlayItf
+    discard pl.getInterface(player)
+    discard player.setPlayState(SL_PLAYSTATE_STOPPED)
+    discard player.setPlayState(SL_PLAYSTATE_PLAYING)
+
 proc setPlayState(pl: SLObjectItf not nil, state: SLPlayState) =
     var player: SLPlayItf
     discard pl.getInterface(player)
@@ -144,6 +150,7 @@ proc collectTrash() {.inline.} =
                     discard close(fd)
                 var t: Pthread
                 discard pthread_create(addr t, nil, deletionThread, item)
+                discard pthread_detach(t)
                 gTrash.del(i)
             else:
                 if not item.isNil:
@@ -168,6 +175,7 @@ proc stop*(s: Sound) =
                 break
         pl.destroy(s.fd)
         s.player = nil
+        s.fd = -1
 
 proc collectInactiveSounds() {.inline.} =
     for i in 0 ..< activeSounds.len:
@@ -180,6 +188,7 @@ proc collectInactiveSounds() {.inline.} =
         if not pl.isNil and not s.mLooping and pl.playState != SL_PLAYSTATE_PLAYING:
             pl.destroy(s.fd)
             s.player = nil
+            s.fd = -1
             activeSounds.del(i)
             break
 
@@ -193,48 +202,47 @@ proc play*(s: Sound) =
     var pl = s.player
     if pl.isNil:
         collectInactiveSounds()
+
+        let rd = loadResourceDescriptor(s.path)
+        s.fd = rd.descriptor
+        var locatorIn = SLDataLocator_AndroidFD(
+            locatorType: SL_DATALOCATOR_TYPE_ANDROIDFD,
+            fd: rd.descriptor,
+            offset: rd.start,
+            length: rd.length)
+
+        var dataFormat = SLDataFormat_MIME(
+            formatType: SL_DATAFORMAT_TYPE_MIME,
+            containerType: SL_CONTAINERTYPE_UNSPECIFIED)
+
+        var audioSrc = SLDataSource(
+            locator: addr locatorIn,
+            format: addr dataFormat)
+
+        var dataLocatorOut = SLDataLocator_OutputMix(
+            locatorType: SL_DATALOCATOR_TYPE_OUTPUTMIX,
+            outputMix: gOutputMix)
+
+        var audioSnk = SLDataSink(locator: addr dataLocatorOut)
+        var slres = gEngine.createAudioPlayer(pl, addr audioSrc, addr audioSnk,
+            [SL_IID_PLAY, SL_IID_SEEK, SL_IID_VOLUME], [SL_TRUE, SL_TRUE, SL_TRUE])
+
+        if slres == SL_RESULT_SUCCESS:
+            discard pl.realize()
+            s.player = pl
+            if not pl.isNil:
+                pl.assumeNotNil.setLooping(s.mLooping)
+                pl.assumeNotNil.setGain(s.mGain)
+                pl.assumeNotNil.setPlayState(SL_PLAYSTATE_PLAYING)
+            if activeSounds.isNil: activeSounds = @[]
+            activeSounds.add(s)
+        else:
+            s.player = nil
+            if s.fd >= 0:
+                discard close(s.fd)
+                s.fd = -1
     else:
-        assumeNotNil(pl).destroy(s.fd)
-        s.player = nil
-        pl = nil
-
-    let rd = loadResourceDescriptor(s.path)
-    s.fd = rd.descriptor
-    var locatorIn = SLDataLocator_AndroidFD(
-        locatorType: SL_DATALOCATOR_TYPE_ANDROIDFD,
-        fd: rd.descriptor,
-        offset: rd.start,
-        length: rd.length)
-
-    var dataFormat = SLDataFormat_MIME(
-        formatType: SL_DATAFORMAT_TYPE_MIME,
-        containerType: SL_CONTAINERTYPE_UNSPECIFIED)
-
-    var audioSrc = SLDataSource(
-        locator: addr locatorIn,
-        format: addr dataFormat)
-
-    var dataLocatorOut = SLDataLocator_OutputMix(
-        locatorType: SL_DATALOCATOR_TYPE_OUTPUTMIX,
-        outputMix: gOutputMix)
-
-    var audioSnk = SLDataSink(locator: addr dataLocatorOut)
-    var slres = gEngine.createAudioPlayer(pl, addr audioSrc, addr audioSnk,
-        [SL_IID_PLAY, SL_IID_SEEK, SL_IID_VOLUME], [SL_TRUE, SL_TRUE, SL_TRUE])
-
-    if slres == SL_RESULT_SUCCESS:
-        discard pl.realize()
-        s.player = pl
-        if not pl.isNil:
-            pl.assumeNotNil.setLooping(s.mLooping)
-            pl.assumeNotNil.setGain(s.mGain)
-            pl.assumeNotNil.setPlayState(SL_PLAYSTATE_PLAYING)
-        if activeSounds.isNil: activeSounds = @[]
-        activeSounds.add(s)
-    else:
-        s.player = nil
-        if s.fd >= 0:
-            discard close(s.fd)
+        pl.assumeNotNil.restart()
 
 proc duration*(s: Sound): float =
     let pl = s.player
