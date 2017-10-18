@@ -1,5 +1,5 @@
 import jnim
-import math, times, logging, posix
+import math, times, logging, posix, strutils
 import opensl
 import android.ndk.aasset_manager
 import android.app.activity
@@ -9,6 +9,7 @@ import android.content.context
 type Sound* = ref object
     player: SLObjectItf
     path: string
+    assetOrFile: bool # true if android asset, false if regular file
     mGain: float
     mLooping: bool
     fd: cint
@@ -42,11 +43,30 @@ proc initEngine() =
     res = gEngine.createOutputMix(gOutputMix, [], [])
     res = gOutputMix.realize()
 
-proc newSoundWithFile*(path: string): Sound =
+proc newSoundWithURL*(url: string): Sound =
+    ## Play sound from inside APK file
+    initEngine()
+    result.new
+    if url.startsWith("android_asset://"):
+        result.path = url.substr("android_asset://".len)
+        result.assetOrFile = true
+        info "sound asset path: ", result.path
+    elif url.startsWith("file://"):
+        result.path = url.substr("file://".len)
+        info "sound file path: ", result.path
+    else:
+        raise newException(Exception, "Unknown URL: " & url)
+
+    result.player = nil
+    result.mGain = 1
+    result.fd = -1
+
+proc newSoundWithFile*(path: string): Sound = # Deprecated... kinda...
     ## Play sound from inside APK file
     initEngine()
     result.new
     result.path = path
+    result.assetOrFile = true
     result.player = nil
     result.mGain = 1
     result.fd = -1
@@ -56,7 +76,7 @@ type ResourseDescriptor {.exportc.} = object
     start: int32
     length: int32
 
-proc loadResourceDescriptor(path: cstring): ResourseDescriptor =
+proc loadResourceDescriptorFromAndroidAsset(path: cstring): ResourseDescriptor =
     var loaded = false
     let asset = gAssetManager.open(path, AASSET_MODE_UNKNOWN)
     if not asset.isNil:
@@ -66,6 +86,12 @@ proc loadResourceDescriptor(path: cstring): ResourseDescriptor =
             loaded = true
     if not loaded:
         raise newException(Exception, "File " & $path & " could not be loaded")
+
+proc loadResourceDescriptorFromFilePath(path: string): ResourseDescriptor =
+    result.descriptor = open(path, O_RDONLY)
+    result.start = 0
+    result.length = lseek(result.descriptor, 0, SEEK_END).int32
+    discard lseek(result.descriptor, 0, SEEK_SET)
 
 proc gainToAttenuation(gain: float): float {.inline.} =
     return if gain < 0.01: -96.0 else: 20 * log10(gain)
@@ -203,7 +229,11 @@ proc play*(s: Sound) =
     if pl.isNil:
         collectInactiveSounds()
 
-        let rd = loadResourceDescriptor(s.path)
+        var rd: ResourseDescriptor
+        if s.assetOrFile:
+            rd = loadResourceDescriptorFromAndroidAsset(s.path)
+        else:
+            rd = loadResourceDescriptorFromFilePath(s.path)
         s.fd = rd.descriptor
         var locatorIn = SLDataLocator_AndroidFD(
             locatorType: SL_DATALOCATOR_TYPE_ANDROIDFD,
