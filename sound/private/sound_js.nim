@@ -17,12 +17,16 @@ proc newAudioContext(): AudioContext {.jsimportgWithName: """
         var AudioContext = (window.AudioContext || window.webkitAudioContext || null); 
         if (AudioContext) {
             var context = new AudioContext();
+            console.log("CREATE SOUND CONTEXT!");
+            console.log(context.state);
             if (context.state == "suspended") {
                 function onClick() {
+                    console.log("SOUND CLICK");
                     context.resume();
                     document.body.removeEventListener("click", onClick, false);
                 }
                 function onLoad() {
+                    console.log("SOUND ONLOAD");
                     document.body.addEventListener("click", onClick, false);
                 }
                 if (document.body) {
