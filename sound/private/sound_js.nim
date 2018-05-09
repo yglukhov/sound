@@ -11,7 +11,32 @@ type
     ArrayBuffer* = ref object of JSObj
     AudioParam = ref object of JSObj
 
-proc newAudioContext(): AudioContext {.jsimportgWithName: "function(){AudioContext = (window.AudioContext || window.webkitAudioContext || null); return (AudioContext)?(new AudioContext):null;}".}
+proc newAudioContext(): AudioContext {.jsimportgWithName: """
+    function() {
+        var AudioContext = (window.AudioContext || window.webkitAudioContext || null); 
+        if (AudioContext) {
+            var context = new AudioContext();
+            console.log(context.state);
+            if (context.state == "suspended") {
+                function onClick() {
+                    context.resume();
+                    document.body.removeEventListener("click", onClick, false);
+                }
+                function onLoad() {
+                    document.body.addEventListener("click", onClick, false);
+                }
+                if (document.body) {
+                    onLoad();
+                } else {
+                    document.addEventListener("DOMContentLoaded", onLoad);
+                }
+            }
+            return context;
+        } else {
+            return null;
+        };
+    }
+""".}
 
 proc createGain(a: AudioContext): GainNode {.jsimport.}
 proc createBufferSource(a: AudioContext): AudioBufferSourceNode {.jsimport.}
