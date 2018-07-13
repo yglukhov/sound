@@ -96,14 +96,16 @@ proc loadResourceDescriptorFromFilePath(path: string): ResourseDescriptor =
 proc gainToAttenuation(gain: float): float {.inline.} =
     return if gain < 0.01: -96.0 else: 20 * log10(gain)
 
-proc setGain(pl: SLObjectItf not nil, v: float) =
+proc setGain(pl: SLObjectItf, v: float) =
+    assert(not pl.isNil)
     let a = gainToAttenuation(v)
     var volume: SLVolumeItf
     let res = pl.getInterface(volume)
     if res == SL_RESULT_SUCCESS:
         discard volume.setVolumeLevel(SLmillibel(a * 100))
 
-proc setLooping(pl: SLObjectItf not nil, flag: bool) =
+proc setLooping(pl: SLObjectItf, flag: bool) =
+    assert(not pl.isNil)
     var seek: SLSeekItf
     let res = pl.getInterface(seek)
     if res == SL_RESULT_SUCCESS:
@@ -123,13 +125,15 @@ proc playState(pl: SLObjectItf): SLPlayState =
         discard pl.getInterface(player)
         discard player.getPlayState(result)
 
-proc restart(pl: SLObjectItf not nil) {.inline.} =
+proc restart(pl: SLObjectItf) {.inline.} =
+    assert(not pl.isNil)
     var player: SLPlayItf
     discard pl.getInterface(player)
     discard player.setPlayState(SL_PLAYSTATE_STOPPED)
     discard player.setPlayState(SL_PLAYSTATE_PLAYING)
 
-proc setPlayState(pl: SLObjectItf not nil, state: SLPlayState) =
+proc setPlayState(pl: SLObjectItf, state: SLPlayState) =
+    assert(not pl.isNil)
     var player: SLPlayItf
     discard pl.getInterface(player)
     var seek: SLSeekItf
@@ -185,7 +189,8 @@ proc collectTrash() {.inline.} =
         else:
             inc i
 
-proc destroy(pl: SLObjectItf not nil, fd: cint) =
+proc destroy(pl: SLObjectItf, fd: cint) =
+    assert(not pl.isNil)
     collectTrash()
     setPlayState(pl, SL_PLAYSTATE_STOPPED)
     if gTrash.isNil: gTrash = @[]
@@ -218,10 +223,10 @@ proc collectInactiveSounds() {.inline.} =
             activeSounds.del(i)
             break
 
-proc assumeNotNil[T](v: T): T not nil {.inline.} =
+proc assumeNotNil[T](v: T): T {.inline.} =
     ## Workaround for nim bug #5781
     assert(not v.isNil)
-    result = cast[T not nil](v)
+    result = cast[T](v)
 
 proc play*(s: Sound) =
     # Define which sound is stopped and can be reused
