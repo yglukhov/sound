@@ -54,7 +54,6 @@ proc play*(s: Sound) =
     if not s.mDataSource.isNil:
         if s.sourceVoice.isNil:
             reclaimInactiveSource()
-            if activeSounds.isNil: activeSounds = @[]
             activeSounds.add(s)
         else:
             discard s.sourceVoice.DestroyVoice(s.sourceVoice)
