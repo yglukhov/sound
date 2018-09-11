@@ -50,10 +50,8 @@ proc newSoundWithURL*(url: string): Sound =
     if url.startsWith("android_asset://"):
         result.path = url.substr("android_asset://".len)
         result.assetOrFile = true
-        info "sound asset path: ", result.path
     elif url.startsWith("file://"):
         result.path = url.substr("file://".len)
-        info "sound file path: ", result.path
     else:
         raise newException(Exception, "Unknown URL: " & url)
 
