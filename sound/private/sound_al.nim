@@ -71,7 +71,6 @@ proc play*(s: Sound) =
             alSourcef(s.src, AL_GAIN, s.mGain)
             alSourcei(s.src, AL_LOOPING, ALint(s.mLooping))
             alSourcePlay(s.src)
-            if activeSounds.isNil: activeSounds = @[]
             activeSounds.add(s)
         else:
             alSourceStop(s.src)

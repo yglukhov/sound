@@ -191,7 +191,6 @@ proc destroy(pl: SLObjectItf, fd: cint) =
     assert(not pl.isNil)
     collectTrash()
     setPlayState(pl, SL_PLAYSTATE_STOPPED)
-    if gTrash.isNil: gTrash = @[]
     gTrash.add( (item: pl, fd: fd, time: epochTime()) )
 
 proc stop*(s: Sound) =
@@ -267,7 +266,6 @@ proc play*(s: Sound) =
                 pl.assumeNotNil.setLooping(s.mLooping)
                 pl.assumeNotNil.setGain(s.mGain)
                 pl.assumeNotNil.setPlayState(SL_PLAYSTATE_PLAYING)
-            if activeSounds.isNil: activeSounds = @[]
             activeSounds.add(s)
         else:
             s.player = nil
