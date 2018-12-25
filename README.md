@@ -19,11 +19,13 @@ when defined(android):
 
 var snd: Sound
 when defined(android):
-    snd = newSoundWithPath("testfile.ogg") # The path is relative to assets folder
+    # Supported URL schemes: android_asset, file
+    snd = newSoundWithURL("android_asset://testfile.ogg") # The path is relative to assets folder
 elif defined(js):
     snd = newSoundWithURL("testfile.ogg") # The url may be relative or absolute. The sound is loaded asynchronously.
 else:
-    snd = newSoundWithPath("testfile.ogg") # The path is relative to current dir.
+    # Supported URL schemes: file.
+    snd = newSoundWithURL("file://" & getAppDir() & "/testfile.ogg")
 
 snd.play()
 ```

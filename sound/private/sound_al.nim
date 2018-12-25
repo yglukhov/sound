@@ -1,5 +1,5 @@
 import openal, data_source_al
-import streams, logging
+import streams, logging, strutils
 
 type Sound* = ref object
     mDataSource: DataSource
@@ -28,9 +28,17 @@ proc newSoundWithPCMData*(data: openarray[byte], channels, bitsPerSample, sample
     ## This function is only availbale for openal for now. Sorry.
     newSoundWithPCMData(unsafeAddr data[0], data.len, channels, bitsPerSample, samplesPerSecond)
 
-proc newSoundWithFile*(path: string): Sound =
+proc newSoundWithPath*(path: string): Sound =
     result = newSound()
     result.dataSource = newDataSourceWithFile(path)
+
+proc newSoundWithFile*(path: string): Sound = newSoundWithPath(path)
+
+proc newSoundWithURL*(url: string): Sound =
+    if url.startsWith("file://"):
+        result = newSoundWithPath(url.substr("file://".len))
+    else:
+        raise newException(Exception, "Unknown URL: " & url)
 
 proc newSoundWithStream*(s: Stream): Sound =
     result = newSound()

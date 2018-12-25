@@ -1,4 +1,4 @@
-import winlean, streams
+import winlean, streams, strutils
 import stb_vorbis
 import context_xaudio2, data_source_xaudio2
 
@@ -17,16 +17,23 @@ proc newSound(): Sound =
 proc `dataSource=`(s: Sound, dataSource: DataSource) =
     s.mDataSource = dataSource
 
-proc newSoundWithFile*(path: string): Sound =
+proc newSoundWithPath*(path: string): Sound =
     createContext()
     result = newSound()
     result.dataSource = newDataSourceWithFile(path)
+
+proc newSoundWithFile*(path: string): Sound = newSoundWithPath(path)
+
+proc newSoundWithURL*(url: string): Sound =
+    if url.startsWith("file://"):
+        result = newSoundWithPath(url.substr("file://".len))
+    else:
+        raise newException(Exception, "Unknown URL: " & url)
 
 proc newSoundWithStream*(s: Stream): Sound =
     createContext()
     result = newSound()
     result.dataSource = newDataSourceWithStream(s)
-
 
 proc isPlaying(s: IXAudio2SourceVoice): bool {.inline.} =
     var state: XAUDIO2_VOICE_STATE
