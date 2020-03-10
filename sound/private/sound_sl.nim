@@ -1,10 +1,10 @@
 import jnim
 import math, times, logging, posix, strutils
 import opensl
-import android.ndk.aasset_manager
-import android.app.activity
-import android.content.res.asset_manager
-import android.content.context
+import android/ndk/aasset_manager
+import android/app/activity
+import android/content/res/asset_manager
+import android/content/context
 
 type Sound* = ref object
     player: SLObjectItf
@@ -24,14 +24,21 @@ var gOutputMix : SLObjectItf
 const TRASH_TIMEOUT = 0.1
 var gTrash: seq[tuple[item: SLObjectItf, fd: cint, time: float]]
 
-proc initSoundEngineWithActivity*(a: jobject) =
-    gJAssetManager = Activity.fromJObject(a).getApplication().getAssets()
+proc initSoundEngineWithActivity(a: Activity) =
+    gJAssetManager = a.getApplication().getAssets()
     gAssetManager = gJAssetManager.getNative()
+
+proc initSoundEngineWithActivity*(a: jobject) =
+    initSoundEngineWithActivity(Activity.fromJObject(a))
 
 proc initEngine() =
     if engineInited: return
     if gAssetManager.isNil:
-        raise newException(Exception, "Sound engine on Android should be initialized by initSoundEngineWithActivity.")
+        let a = currentActivityIfPresent()
+        if not a.isNil:
+            initSoundEngineWithActivity(a)
+        if gAssetManager.isNil:
+            raise newException(Exception, "Sound engine on Android should be initialized by initSoundEngineWithActivity.")
     engineInited = true
     var engine: SLObjectItf
     var res = slCreateEngine(engine, [], [SL_IID_ENGINE], [SL_TRUE])

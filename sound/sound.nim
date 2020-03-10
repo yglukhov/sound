@@ -1,14 +1,14 @@
 when defined(macosx) or defined(ios):
-    include private.sound_al
+    include private/sound_al
 elif defined(windows):
-    include private.sound_xaudio2
+    include private/sound_xaudio2
 #    include private.sound_al
 elif defined(android):
-    include private.sound_sl
+    include private/sound_sl
 elif defined(js) or defined(emscripten):
-    include private.sound_js
+    include private/sound_js
 elif defined(linux):
-    include private.sound_al
+    include private/sound_al
 
 when isMainModule:
     import os
