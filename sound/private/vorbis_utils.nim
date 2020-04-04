@@ -1,10 +1,10 @@
 import stb_vorbis, streams
 
-proc c_malloc(size: csize): pointer {.
+proc c_malloc(size: csize_t): pointer {.
   importc: "malloc", header: "<stdlib.h>".}
 proc c_free(p: pointer) {.
   importc: "free", header: "<stdlib.h>".}
-proc c_realloc(p: pointer, newsize: csize): pointer {.
+proc c_realloc(p: pointer, newsize: csize_t): pointer {.
   importc: "realloc", header: "<stdlib.h>".}
 
 proc loadVorbis(v: Vorbis, outBuffer: var pointer, outLen, outChannels, outBitsPerSample, outSamplesPerSecond: var int) =
@@ -28,7 +28,7 @@ proc loadVorbis(v: Vorbis, outBuffer: var pointer, outLen, outChannels, outBitsP
         if buffer.isNil:
             buffer = cast[ptr uint16](c_malloc(OGG_BUFFER_SIZE * bytesPerSample))
         else:
-            buffer = cast[ptr uint16](c_realloc(buffer, ((curOffset + OGG_BUFFER_SIZE) * bytesPerSample).csize))
+            buffer = cast[ptr uint16](c_realloc(buffer, ((curOffset + OGG_BUFFER_SIZE) * bytesPerSample).csize_t))
         let dataRead = stb_vorbis_get_samples_short_interleaved(v, i.channels, cast[ptr uint16](cast[uint](buffer) + curOffset * bytesPerSample), OGG_BUFFER_SIZE) * i.channels
         curOffset += uint(dataRead)
         if dataRead < OGG_BUFFER_SIZE:
