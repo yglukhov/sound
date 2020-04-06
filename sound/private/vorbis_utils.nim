@@ -1,5 +1,9 @@
 import stb_vorbis, streams
 
+when not declared(csize_t):
+    type csize_t {.importc: "size_t", nodecl.} = uint
+
+
 proc c_malloc(size: csize_t): pointer {.
   importc: "malloc", header: "<stdlib.h>".}
 proc c_free(p: pointer) {.
