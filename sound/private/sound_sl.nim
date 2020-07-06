@@ -81,7 +81,7 @@ type ResourseDescriptor {.exportc.} = object
     start: int32
     length: int32
 
-proc loadResourceDescriptorFromAndroidAsset(path: cstring): ResourseDescriptor =
+proc loadResourceDescriptorFromAndroidAsset(path: string): ResourseDescriptor =
     var loaded = false
     let asset = gAssetManager.open(path, AASSET_MODE_UNKNOWN)
     if not asset.isNil:
