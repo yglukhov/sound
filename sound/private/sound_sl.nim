@@ -78,10 +78,10 @@ proc newSoundWithFile*(path: string): Sound = # Deprecated... kinda...
 
 type ResourseDescriptor {.exportc.} = object
     descriptor: int32
-    start: int32
-    length: int32
+    start: int
+    length: int
 
-proc loadResourceDescriptorFromAndroidAsset(path: cstring): ResourseDescriptor =
+proc loadResourceDescriptorFromAndroidAsset(path: string): ResourseDescriptor =
     var loaded = false
     let asset = gAssetManager.open(path, AASSET_MODE_UNKNOWN)
     if not asset.isNil:
