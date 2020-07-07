@@ -78,8 +78,8 @@ proc newSoundWithFile*(path: string): Sound = # Deprecated... kinda...
 
 type ResourseDescriptor {.exportc.} = object
     descriptor: int32
-    start: int32
-    length: int32
+    start: int
+    length: int
 
 proc loadResourceDescriptorFromAndroidAsset(path: string): ResourseDescriptor =
     var loaded = false
