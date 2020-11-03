@@ -1,4 +1,4 @@
-import winlean, streams, strutils
+import winlean, streams, strutils, logging
 import stb_vorbis
 import context_xaudio2, data_source_xaudio2
 
@@ -11,8 +11,7 @@ type Sound* = ref object
 var activeSounds: seq[Sound]
 
 proc newSound(): Sound =
-  result.new()
-  result.mGain = 1.0
+  Sound(mGain: 1)
 
 proc `dataSource=`(s: Sound, dataSource: DataSource) =
   s.mDataSource = dataSource
@@ -72,6 +71,19 @@ proc play*(s: Sound) =
 proc stop*(s: Sound) =
   if not s.sourceVoice.isNil:
     discard s.sourceVoice.Stop(s.sourceVoice, 0, 0)
+
+proc pause*(s: Sound) =
+  # TODO: Implement me
+  discard
+
+proc state*(s: Sound): SoundState =
+  # TODO: Implement pause
+  if s.sourceVoice.isNil:
+    result = stopped
+  elif isPlaying(s.sourceVoice):
+    result = playing
+  else:
+    result = complete
 
 proc `gain=`*(s: Sound, v: float) =
   s.mGain = v

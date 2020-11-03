@@ -1,4 +1,5 @@
 # Reference: https://www.khronos.org/registry/OpenSL-ES/api/1.0.1/OpenSLES.h
+# https://www.khronos.org/registry/OpenSL-ES/specs/OpenSL_ES_Specification_1.1.pdf
 
 type
   SLboolean* {.size: sizeof(uint32).} = enum
@@ -113,8 +114,12 @@ type
     SetStereoPosition*: proc(self: SLVolumeItf, stereoPosition: SLpermille): SLresult {.cdecl.}
     GetStereoPosition*: proc(self: SLVolumeItf, stereoPosition: var SLpermille): SLresult {.cdecl.}
 
+  SLSeekMode* {.size: sizeof(uint32).} = enum
+    SL_SEEKMODE_FAST = 0x00000001
+    SL_SEEKMODE_ACCURATE = 0x00000002
+
   SLSeekItf* = ptr ptr object
-    SetPosition*: proc(self: SLSeekItf, pos: SLmillisecond, seekMode: uint32): SLresult {.cdecl.}
+    SetPosition*: proc(self: SLSeekItf, pos: SLmillisecond, seekMode: SLSeekMode): SLresult {.cdecl.}
     SetLoop*: proc(self: SLSeekItf, loopEnable: SLboolean, startPos, endPos: SLmillisecond): SLresult {.cdecl.}
     GetLoop*: proc(self: SLSeekItf, loopEnable: var SLboolean, startPos, endPos: var SLmillisecond): SLresult {.cdecl.}
 
@@ -425,7 +430,7 @@ proc setStereoPosition*(self: SLVolumeItf, stereoPosition: SLpermille): SLresult
 proc getStereoPosition*(self: SLVolumeItf, stereoPosition: var SLpermille): SLresult = self.GetStereoPosition(self, stereoPosition)
 
 # SLSeekItf wrappers
-proc setPosition*(self: SLSeekItf, pos: SLmillisecond, seekMode: uint32): SLresult = self.SetPosition(self, pos, seekMode)
+proc setPosition*(self: SLSeekItf, pos: SLmillisecond, seekMode: SLSeekMode): SLresult = self.SetPosition(self, pos, seekMode)
 proc setLoop*(self: SLSeekItf, loopEnable: bool, startPos, endPos: SLmillisecond): SLresult = self.SetLoop(self, SLboolean(loopEnable), startPos, endPos)
 proc getLoop*(self: SLSeekItf, loopEnable: var bool, startPos, endPos: var SLmillisecond): SLresult =
   var enable: SLboolean

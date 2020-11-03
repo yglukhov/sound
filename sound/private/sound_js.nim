@@ -32,9 +32,8 @@ proc newAudioContext(): AudioContext {.jsimportgWithName: """
         }
       }
       return context;
-    } else {
-      return null;
-    };
+    }
+    return null;
   }
 """.}
 
@@ -46,6 +45,7 @@ proc connect(n1, n2: AudioNode) {.jsimport.}
 proc disconnect(n1: AudioNode) {.jsimport.}
 
 proc destination(a: AudioContext): AudioNode {.jsimportProp.}
+proc currentTime(a: AudioContext): float {.jsimportProp.}
 
 proc buffer(n: AudioBufferSourceNode): AudioBuffer {.jsimportProp.}
 proc loop(n: AudioBufferSourceNode): bool {.jsimportProp.}
@@ -55,7 +55,7 @@ proc `onended=`*(n: AudioBufferSourceNode, p: proc()) {.jsimportProp.}
 
 proc duration(b: AudioBuffer): cfloat {.jsimportProp.}
 
-proc start(s: AudioBufferSourceNode) {.jsimport.}
+proc start(s: AudioBufferSourceNode, `when`, offset: float) {.jsimport.}
 proc stop(s: AudioBufferSourceNode) {.jsimport.}
 
 proc gain(g: GainNode): AudioParam {.jsimportProp.}
@@ -65,9 +65,10 @@ proc `value=`(g: AudioParam, v: cfloat) {.jsimportProp.}
 type Sound* = ref object
   source*: AudioBufferSourceNode
   gain: GainNode
-  freshSource: bool
+  startedAt, pausedAt: float
   when defined(emscripten):
     completionHandler: proc()
+  freshSource: bool
 
 var context: AudioContext
 var mainVolume: GainNode
@@ -97,19 +98,17 @@ proc initWithArrayBuffer(s: Sound, ab: ArrayBuffer, handler: proc() = nil) =
     var onError : proc(e: JSObj)
 
     onSuccess = proc(b: AudioBuffer) =
-      handleJSExceptions:
-        jsUnref(onSuccess)
-        jsUnref(onError)
-        s.source.buffer = b
-        if not handler.isNil: handler()
+      jsUnref(onSuccess)
+      jsUnref(onError)
+      s.source.buffer = b
+      if not handler.isNil: handler()
 
     onError = proc(e: JSObj) =
-      handleJSExceptions:
-        jsUnref(onSuccess)
-        jsUnref(onError)
-        s.source = nil
-        error "Error decoding audio data"
-        if not handler.isNil: handler()
+      jsUnref(onSuccess)
+      jsUnref(onError)
+      s.source = nil
+      error "Error decoding audio data"
+      if not handler.isNil: handler()
 
     jsRef(onSuccess)
     jsRef(onError)
@@ -157,9 +156,8 @@ proc newSoundWithURL*(url: string): Sound =
   let snd = result
   var reqListener : proc()
   reqListener = proc() =
-    handleJSExceptions:
-      jsUnref(reqListener)
-      snd.initWithArrayBuffer(cast[ArrayBuffer](req.response))
+    jsUnref(reqListener)
+    snd.initWithArrayBuffer(cast[ArrayBuffer](req.response))
   jsRef(reqListener)
 
   req.addEventListener("load", reqListener)
@@ -170,7 +168,6 @@ proc setLooping*(s: Sound, flag: bool) =
     s.source.loop = flag
 
 proc recreateSource(s: Sound) =
-  var source = s.source
   let newSource = context.createBufferSource()
   newSource.connect(s.gain)
   newSource.buffer = s.source.buffer
@@ -187,13 +184,42 @@ proc play*(s: Sound) =
   if not s.source.isNil:
     if not s.freshSource:
       s.recreateSource()
-    s.source.start()
     s.freshSource = false
+    var p = s.pausedAt
+    s.pausedAt = 0
+    if p < 0: p = 0
+    s.source.start(0, p)
+    s.startedAt = context.currentTime - p
 
 proc stop*(s: Sound) =
   if not s.source.isNil and not s.freshSource:
     s.source.stop()
     s.recreateSource()
+  s.pausedAt = 0
+  s.startedAt = 0
+
+proc pause*(s: Sound) =
+  if not s.source.isNil:
+    if not s.freshSource:
+      s.source.stop()
+      s.recreateSource()
+    if s.startedAt != 0:
+      s.pausedAt = context.currentTime - s.startedAt
+    else:
+      s.pauseAt = -1
+
+proc state*(s: Sound): SoundState =
+  let
+    startedAt = s.startedAt
+    pausedAt = s.pausedAt
+  if startedAt == 0 and pausedAt == 0:
+    result = stopped
+  elif pausedAt != 0:
+    result = paused
+  elif startedAt + s.duration < context.currentTime:
+    result = playing
+  else:
+    result = complete
 
 proc `gain=`*(s: Sound, v: float) =
   let g = s.gain

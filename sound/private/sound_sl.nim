@@ -6,23 +6,40 @@ import android/app/activity
 import android/content/res/asset_manager
 import android/content/context
 
-type Sound* = ref object
-  player: SLObjectItf
-  path: string
-  assetOrFile: bool # true if android asset, false if regular file
-  mGain: float
-  mLooping: bool
-  fd: cint
+type
+  Flag = enum
+    fLooping
+    fAssetOrFile # true if android asset, false if regular file
+
+  Sound* = ref object
+    player: SLObjectItf
+    path: string
+    mGain: float32
+    fd: cint
+    pausePosition: SLmillisecond
+    flags: set[Flag]
+    mState: State
+
+  State = enum
+    sStopped
+    sPlaying
+    sPaused
+    sPlayingPastEnd
+    sPausedPastEnd
 
 var engineInited = false
 
 var gJAssetManager: AssetManager # Used to keep the reference alive
 var gAssetManager : AAssetManager
-var gEngine : SLEngineItf # = nil
+var gEngine : SLEngineItf
 var gOutputMix : SLObjectItf
 
 const TRASH_TIMEOUT = 0.1
 var gTrash: seq[tuple[item: SLObjectItf, fd: cint, time: float]]
+
+proc setFlag[T](s: var set[T], v: T, f: bool) {.inline.} =
+  if f: s.incl(v)
+  else: s.excl(v)
 
 proc initSoundEngineWithActivity(a: Activity) =
   gJAssetManager = a.getApplication().getAssets()
@@ -53,28 +70,19 @@ proc initEngine() =
 proc newSoundWithURL*(url: string): Sound =
   ## Play sound from inside APK file
   initEngine()
-  result.new
+  result = Sound(mGain: 1, fd: -1)
   if url.startsWith("android_asset://"):
     result.path = url.substr("android_asset://".len)
-    result.assetOrFile = true
+    result.flags.incl(fAssetOrFile)
   elif url.startsWith("file://"):
     result.path = url.substr("file://".len)
   else:
     raise newException(Exception, "Unknown URL: " & url)
 
-  result.player = nil
-  result.mGain = 1
-  result.fd = -1
-
 proc newSoundWithFile*(path: string): Sound = # Deprecated... kinda...
   ## Play sound from inside APK file
   initEngine()
-  result.new
-  result.path = path
-  result.assetOrFile = true
-  result.player = nil
-  result.mGain = 1
-  result.fd = -1
+  Sound(path: path, flags: {fAssetOrFile}, mGain: 1, fd: -1)
 
 type ResourseDescriptor {.exportc.} = object
   descriptor: int32
@@ -99,14 +107,14 @@ proc loadResourceDescriptorFromFilePath(path: string): ResourseDescriptor =
   discard lseek(result.descriptor, 0, SEEK_SET)
 
 proc gainToAttenuation(gain: float): float {.inline.} =
-  return if gain < 0.01: -96.0 else: 20 * log10(gain)
+  if gain < 0.01: -96.0 else: 20 * log10(gain)
 
 proc setGain(pl: SLObjectItf, v: float) =
   assert(not pl.isNil)
-  let a = gainToAttenuation(v)
   var volume: SLVolumeItf
   let res = pl.getInterface(volume)
   if res == SL_RESULT_SUCCESS:
+    let a = gainToAttenuation(v)
     discard volume.setVolumeLevel(SLmillibel(a * 100))
 
 proc setLooping(pl: SLObjectItf, flag: bool) =
@@ -117,7 +125,7 @@ proc setLooping(pl: SLObjectItf, flag: bool) =
     discard seek.setLoop(flag, 0, SL_TIME_UNKNOWN)
 
 proc setLooping*(s: Sound, flag: bool) =
-  s.mLooping = flag
+  s.flags.setFlag(fLooping, flag)
   let pl = s.player
   if not pl.isNil:
     pl.setLooping(flag)
@@ -125,10 +133,10 @@ proc setLooping*(s: Sound, flag: bool) =
 var activeSounds: seq[Sound]
 
 proc playState(pl: SLObjectItf): SLPlayState =
-  if not pl.isNil:
-    var player: SLPlayItf
-    discard pl.getInterface(player)
-    discard player.getPlayState(result)
+  assert(not pl.isNil)
+  var player: SLPlayItf
+  discard pl.getInterface(player)
+  discard player.getPlayState(result)
 
 proc restart(pl: SLObjectItf) {.inline.} =
   assert(not pl.isNil)
@@ -141,15 +149,10 @@ proc setPlayState(pl: SLObjectItf, state: SLPlayState) =
   assert(not pl.isNil)
   var player: SLPlayItf
   discard pl.getInterface(player)
-  var seek: SLSeekItf
-  discard pl.getInterface(seek)
-  discard seek.setLoop(false, 0, SL_TIME_UNKNOWN)
   discard player.setPlayState(state)
 
-proc getPlayState(pl: SLObjectItf): SLPlayState =
-  var player: SLPlayItf
-  discard pl.getInterface(player)
-  discard player.getPlayState(result)
+proc getPlayState(pl: SLPlayItf): SLPlayState {.inline.} =
+  discard pl.getPlayState(result)
 
 # Destroying OpenSL players may cause dead lock.
 # It's a system issue :(
@@ -180,7 +183,9 @@ proc collectTrash() {.inline.} =
   while i < gTrash.len:
     var (item, fd, time) = gTrash[i]
     if abs(time - curTime) > TRASH_TIMEOUT:
-      if getPlayState(item) == SL_PLAYSTATE_STOPPED:
+      var player: SLPlayItf
+      discard item.getInterface(player)
+      if getPlayState(player) == SL_PLAYSTATE_STOPPED:
         if fd >= 0:
           discard close(fd)
         var t: Pthread
@@ -188,8 +193,7 @@ proc collectTrash() {.inline.} =
         discard pthread_detach(t)
         gTrash.del(i)
       else:
-        if not item.isNil:
-          setPlayState(item, SL_PLAYSTATE_STOPPED)
+        discard setPlayState(player, SL_PLAYSTATE_STOPPED)
         inc i
     else:
       inc i
@@ -200,18 +204,6 @@ proc destroy(pl: SLObjectItf, fd: cint) =
   setPlayState(pl, SL_PLAYSTATE_STOPPED)
   gTrash.add( (item: pl, fd: fd, time: epochTime()) )
 
-proc stop*(s: Sound) =
-  let pl = s.player
-  if not pl.isNil:
-    pl.setPlayState(SL_PLAYSTATE_STOPPED)
-    for i in 0 ..< activeSounds.len:
-      if s == activeSounds[i]:
-        activeSounds.del(i)
-        break
-    pl.destroy(s.fd)
-    s.player = nil
-    s.fd = -1
-
 proc collectInactiveSounds() {.inline.} =
   for i in 0 ..< activeSounds.len:
     let s = activeSounds[i]
@@ -220,26 +212,26 @@ proc collectInactiveSounds() {.inline.} =
     # SL_PLAYSTATE_PAUSED for actually active looping players that have gone
     # through one loop and continue playing, so we cannot dispose looping
     # players here. Instead they may be disposed in stop().
-    if not pl.isNil and not s.mLooping and pl.playState != SL_PLAYSTATE_PLAYING:
+    if not pl.isNil and fLooping notin s.flags and pl.playState != SL_PLAYSTATE_PLAYING:
       pl.destroy(s.fd)
       s.player = nil
       s.fd = -1
+      s.mState = sPlayingPastEnd
       activeSounds.del(i)
       break
 
-proc assumeNotNil[T](v: T): T {.inline.} =
-  ## Workaround for nim bug #5781
-  assert(not v.isNil)
-  result = cast[T](v)
-
 proc play*(s: Sound) =
+  if s.mState == sPausedPastEnd:
+    s.mState = sPlayingPastEnd
+    return
+
   # Define which sound is stopped and can be reused
   var pl = s.player
   if pl.isNil:
     collectInactiveSounds()
 
     var rd: ResourseDescriptor
-    if s.assetOrFile:
+    if fAssetOrFile in s.flags:
       rd = loadResourceDescriptorFromAndroidAsset(s.path)
     else:
       rd = loadResourceDescriptorFromFilePath(s.path)
@@ -263,24 +255,96 @@ proc play*(s: Sound) =
       outputMix: gOutputMix)
 
     var audioSnk = SLDataSink(locator: addr dataLocatorOut)
-    var slres = gEngine.createAudioPlayer(pl, addr audioSrc, addr audioSnk,
+    let res = gEngine.createAudioPlayer(pl, addr audioSrc, addr audioSnk,
       [SL_IID_PLAY, SL_IID_SEEK, SL_IID_VOLUME], [SL_TRUE, SL_TRUE, SL_TRUE])
 
-    if slres == SL_RESULT_SUCCESS:
+    if res == SL_RESULT_SUCCESS:
       discard pl.realize()
       s.player = pl
       if not pl.isNil:
-        pl.assumeNotNil.setLooping(s.mLooping)
-        pl.assumeNotNil.setGain(s.mGain)
-        pl.assumeNotNil.setPlayState(SL_PLAYSTATE_PLAYING)
+        var seek: SLSeekItf
+        if pl.getInterface(seek) == SL_RESULT_SUCCESS:
+          discard seek.setLoop(fLooping in s.flags, 0, SL_TIME_UNKNOWN)
+          if s.pausePosition != 0:
+            discard seek.setPosition(s.pausePosition, SL_SEEKMODE_FAST)
+        s.pausePosition = 0
+
+        pl.setGain(s.mGain)
+
       activeSounds.add(s)
     else:
-      s.player = nil
+      pl = nil
       if s.fd >= 0:
         discard close(s.fd)
         s.fd = -1
-  else:
-    pl.assumeNotNil.restart()
+      return
+
+  case s.mState
+  of sPaused, sStopped:
+    pl.setPlayState(SL_PLAYSTATE_PLAYING)
+    s.mState = sPlaying
+  of sPlaying, sPlayingPastEnd:
+    pl.restart()
+    s.mState = sPlaying
+  of sPausedPastEnd:
+    # Should not get here. Tested at the beginning of this proc.
+    s.mState = sPlayingPastEnd
+
+proc clear(s: Sound) =
+  let pl = s.player
+  assert(not pl.isNil)
+
+  for i in 0 ..< activeSounds.len:
+    if s == activeSounds[i]:
+      activeSounds.del(i)
+      break
+  pl.destroy(s.fd)
+  s.player = nil
+  s.fd = -1
+
+proc stop*(s: Sound) =
+  let pl = s.player
+  if not pl.isNil:
+    pl.setPlayState(SL_PLAYSTATE_STOPPED)
+    s.clear()
+  s.pausePosition = 0
+  s.mState = sStopped
+
+proc pause*(s: Sound) =
+  case s.mState
+  of sStopped:
+    s.mState = sPaused
+    s.pausePosition = 0
+  of sPaused, sPausedPastEnd:
+    discard
+  of sPlayingPastEnd:
+    s.mState = sPausedPastEnd
+  of sPlaying:
+    assert(not s.player.isNil)
+    var player: SLPlayItf
+    discard s.player.getInterface(player)
+    let slState = player.getPlayState()
+    var pos: SLmillisecond
+    discard player.getPosition(pos)
+    discard player.setPlayState(SL_PLAYSTATE_STOPPED)
+    if slState != SL_PLAYSTATE_PLAYING and fLooping notin s.flags:
+      s.mState = sPausedPastEnd
+    else:
+      s.mState = sPaused
+      s.pausePosition = pos
+    s.clear()
+
+proc state*(s: Sound): SoundState =
+  case s.mState
+  of sPaused, sPausedPastEnd: result = paused
+  of sPlaying:
+    if s.player.playState != SL_PLAYSTATE_PLAYING and fLooping notin s.flags:
+      s.mState = sPlayingPastEnd
+      result = complete
+    else:
+      result = playing
+  of sStopped: result = stopped
+  of sPlayingPastEnd: result = complete
 
 proc duration*(s: Sound): float =
   let pl = s.player

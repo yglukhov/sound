@@ -1,3 +1,30 @@
+
+type
+  SoundState* = enum
+    # Intial state
+    # play() -> playing
+    # pause() -> paused (at the beginning)
+    # stop() -> nop -> stopped
+    stopped
+
+    # Playing state. Will occasionally transition to complete if not looping
+    # play() -> restart -> playing
+    # pause() -> paused
+    # stop() -> stopped
+    playing
+
+    # Paused. Can only be entered through pause()
+    # play() -> resume -> (playing if prev state is playing or stopped, complete if previous state is complete)
+    # pause() -> nop -> paused
+    # stop() -> stopped
+    paused
+
+    # Complete.
+    # play() -> restart -> playing
+    # pause() -> paused # the cursor is still at the end. play() will return to complete again
+    # stop() -> stopped
+    complete
+
 when defined(macosx) or defined(ios):
   include private/sound_al
 elif defined(windows):
