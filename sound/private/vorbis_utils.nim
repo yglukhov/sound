@@ -13,30 +13,30 @@ proc loadVorbis(v: Vorbis, outBuffer: var pointer, outLen, outChannels, outBitsP
   assert(not v.isNil)
   if v.isNil: return
   let i = stb_vorbis_get_info(v)
-  const bytesPerSample = 2
 
-  var buffer : ptr uint16
-  #var buffer = newSeq[uint16]() # The sound buffer data from file
-
-  #var endian: cint = 0 # 0 for Little-Endian, 1 for Big-Endian
-
-  const OGG_BUFFER_SIZE = 32768
+  const bytesPerSample = sizeof(uint16)
 
   var curOffset: uint
+  var bufSz = 128 * 1024 * bytesPerSample * i.channels # 128K samples per channel
+  var freeSz = bufSz
+  var buffer = cast[ptr uint16](c_malloc(bufSz.csize_t))
+
   while true:
-    # Read up to a buffer's worth of decoded sound data
-    if buffer.isNil:
-      buffer = cast[ptr uint16](c_malloc(OGG_BUFFER_SIZE * bytesPerSample))
-    else:
-      buffer = cast[ptr uint16](c_realloc(buffer, ((curOffset + OGG_BUFFER_SIZE) * bytesPerSample).csize_t))
-    let dataRead = stb_vorbis_get_samples_short_interleaved(v, i.channels, cast[ptr uint16](cast[uint](buffer) + curOffset * bytesPerSample), OGG_BUFFER_SIZE) * i.channels
-    curOffset += uint(dataRead)
-    if dataRead < OGG_BUFFER_SIZE:
+    # Fill up buffer from `curOffset` with `freeSz` decoded bytes
+    let shortsToRead = cint(freeSz div sizeof(uint16))
+    let shortsRead = stb_vorbis_get_samples_short_interleaved(v, i.channels, cast[ptr uint16](cast[uint](buffer) + curOffset), shortsToRead) * i.channels
+    curOffset += uint(shortsRead * sizeof(uint16))
+    if shortsRead < shortsToRead:
       break
+
+    # Buffer is full, now double the size
+    freeSz = bufSz
+    bufSz *= 2
+    buffer = cast[ptr uint16](c_realloc(buffer, bufSz.csize_t))
 
   stb_vorbis_close(v)
   outBuffer = buffer
-  outLen = int(curOffset * bytesPerSample)
+  outLen = int(curOffset)
   outChannels = i.channels
   outBitsPerSample = bytesPerSample * 8
   outSamplesPerSecond = int(i.sample_rate)
